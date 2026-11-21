@@ -1,1 +1,27 @@
 .agents/*
+# Godot 4 generated cache & build artifacts
+.godot/
+*.translation
+export_presets.cfg
+
+# Python / uv environment & caches
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Blender backup & temporary files
+*.blend1
+*.blend2
+*.blend@
+
+# Local QA loop / OS noise
+.qa_loop/
+.DS_Store
+Thumbs.db
