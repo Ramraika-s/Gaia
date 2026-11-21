@@ -1,0 +1,82 @@
+{
+  "version": 2,
+  "skills": {
+    "3d-essentials": {
+      "source": "jame581/GodotPrompter",
+      "commit": "426e8ab597473d1c71a11a04f6f0f2e1182a8e39",
+      "sourceType": "github",
+      "skillPath": "skills/3d-essentials/SKILL.md",
+      "computedHash": "912340faa2cca21999d9953bbfeb89f1555ccdaf1e1a9f070db39d8093542df3"
+    },
+    "assets-pipeline": {
+      "source": "jame581/GodotPrompter",
+      "commit": "426e8ab597473d1c71a11a04f6f0f2e1182a8e39",
+      "sourceType": "github",
+      "skillPath": "skills/assets-pipeline/SKILL.md",
+      "computedHash": "f89cbfa0a749f1d13d4e12cb5b44380afecf6f03ff8525cca8c4fb24b7a8f0fb"
+    },
+    "dimensional-analysis": {
+      "source": "trailofbits/skills",
+      "commit": "149d7b21f4067765b82e67029730b42d228ef4b4",
+      "sourceType": "github",
+      "skillPath": "plugins/dimensional-analysis/skills/dimensional-analysis/SKILL.md",
+      "computedHash": "9ad531ac4083358dbe83dace4993dfd0eda125785f112f2ce2b1e17378330755"
+    },
+    "dispatching-parallel-agents": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/dispatching-parallel-agents/SKILL.md",
+      "computedHash": "d799e464fdfb0edc80b3b7ad7cce03e64ee07fc5db231c988688a81438503659"
+    },
+    "particles-vfx": {
+      "source": "jame581/GodotPrompter",
+      "commit": "426e8ab597473d1c71a11a04f6f0f2e1182a8e39",
+      "sourceType": "github",
+      "skillPath": "skills/particles-vfx/SKILL.md",
+      "computedHash": "140af8bc14a89d9e9df90e644ba338412df43b2a6f06d9e4740e067034820928"
+    },
+    "sharp-edges": {
+      "source": "trailofbits/skills",
+      "commit": "149d7b21f4067765b82e67029730b42d228ef4b4",
+      "sourceType": "github",
+      "skillPath": "plugins/sharp-edges/skills/sharp-edges/SKILL.md",
+      "computedHash": "fa36c2d4f9fa315eebcf03b4687dc760ff6b5805de69a3d2614a6b0fce695c6d"
+    },
+    "subagent-driven-development": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/subagent-driven-development/SKILL.md",
+      "computedHash": "da0ad5e635b6ff70c2b6dbf25e51ae6ca1cad6beebfc61a791195675468c492e"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/systematic-debugging/SKILL.md",
+      "computedHash": "79ff0583175346e39431b0dc713b223edd1bd7a7ea2b6c8b78b2fb9a3fed6782"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/test-driven-development/SKILL.md",
+      "computedHash": "2782702b2cf69ace085ed30d067b6f8bfd2d777ad51770fc5bdae9cb5c1b5c04"
+    },
+    "uv-package-manager": {
+      "source": "wshobson/agents",
+      "commit": "42203085cfc5736204bf0f6d436dff7e1da0bf3f",
+      "sourceType": "github",
+      "skillPath": "plugins/python-development/skills/uv-package-manager/SKILL.md",
+      "computedHash": "adecd8faec01ee261801680942c6a97159d73c3ae9f355568cf9426edc61c1c3"
+    },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "09b0e3a4689c1c38a3b8fc6ef57a1d4165aa33c0013d546dbde9dd348941a319"
+    }
+  }
+}
