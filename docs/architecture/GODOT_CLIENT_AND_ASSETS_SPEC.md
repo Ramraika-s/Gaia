@@ -51,8 +51,8 @@ All environment packs below are free (**CC0**) and ship in `.gltf` / `.glb` / `.
 
 ---
 
-## 4. The 6 Bespoke Divine Hero Models (VRoid Studio + Blender Pipeline)
-Because only **6 Divine Hero Models** exist, they use bespoke anime proportions created via **VRoid Studio** (free on Steam via Proton on Fedora 45):
+## 4. The 7 Bespoke Divine Hero Models (VRoid Studio + Blender Pipeline)
+Because only **7 Divine Hero Models** exist, they use bespoke anime proportions created via **VRoid Studio** (free on Steam via Proton on Fedora 45):
 
 | Entity | Model File | Visual Design & Distinct Features | Key Animations |
 | :--- | :--- | :--- | :--- |
@@ -62,20 +62,21 @@ Because only **6 Divine Hero Models** exist, they use bespoke anime proportions 
 | **4. Elf God-Mother** | `gm_elf.vrm` | Tall sylvan maiden with long pointed ears, emerald leaf-woven gown, living vine crown, glowing spirit wisps. | `idle`, `glide`, `nature_heal`, `council_talk`, `forest_ward` |
 | **5. Dragon God-Mother** | `gm_dragon.vrm` | Composed draconic empress in humanoid-dragon form—crimson/obsidian scales, curved horns, sweeping wings, glowing amber eyes. | `idle`, `hover_walk`, `wing_flare`, `council_talk`, `dragon_roar` |
 | **6. Beasthuman God-Mother** | `gm_beasthuman.vrm` | Proud guardian deity with fox/wolf ears, fur-trimmed tribal regalia, golden claw gauntlets. | `idle`, `prowl_walk`, `rally_pack`, `council_talk`, `bestow_strength` |
+| **7. Demon God-Mother** | `gm_demon.vrm` | Sovereign infernal matriarch in obsidian/crimson regalia, curved horns, dark flame/bat wings, runic catalyst. | `idle`, `hover_walk`, `rally_fury`, `council_talk`, `demon_strike` |
 
 ### Strict VRoid → Blender → Godot Rules
-1. **Use VRoid's Built-In Optimizer (NO Blender Decimate):** Export each deity from VRoid Studio using its built-in **Reduce Polygons + Combine Meshes** preset (~`8,000–12,000` triangles). **Never** apply Blender's `Decimate` modifier to a rigged `.vrm`, as it corrupts weight painting and facial blendshapes. Six hero deities at ~10k tris have negligible GPU cost on the Radeon 780M.
+1. **Use VRoid's Built-In Optimizer (NO Blender Decimate):** Export each deity from VRoid Studio using its built-in **Reduce Polygons + Combine Meshes** preset (~`8,000–12,000` triangles). **Never** apply Blender's `Decimate` modifier to a rigged `.vrm`, as it corrupts weight painting and facial blendshapes. Seven hero deities at ~10k tris have negligible GPU cost on the Radeon 780M.
 2. **Blender Bone-Parenting Only (`sudo dnf install blender`):** Import `.vrm` via the free **VRM Add-on for Blender** solely to parent external props/appendages (horns, wings, ears, gauntlets, astrolabe, lantern) onto existing `Head`, `Chest`, or `Hand` bones, then re-export as `.vrm` (preserving MToon materials & spring-bone physics).
 3. **Animations:** Source from **Mixamo** or **Quaternius Universal Animation Library** retargeted onto `SkeletonProfileHumanoid`.
 
 ---
 
-## 5. The 6 Base Mortal Rigs, Shared Skeleton, Metamorphosis & Uniqueness Shader
-All `60–120` pooled mortals are driven by **6 lightweight base rigs** (`600–1,200` triangles each) sharing one humanoid skeleton across all humanoid races:
+## 5. The 7 Base Mortal Rigs, Shared Skeleton, Metamorphosis & Uniqueness Shader
+All `60–120` pooled mortals are driven by **7 lightweight base rigs** (`600–1,200` triangles each) sharing one humanoid skeleton across all humanoid races:
 
 | Asset Slot | Exact Free Source (CC0) | Setup & Scaling Notes |
 | :--- | :--- | :--- |
-| `base_human.glb` & `base_elf.glb` | **Quaternius: Characters - Fantasy Races** + **Modular Character Outfits - Fantasy** | Universal Humanoid Rig. Scale `base_elf` to `1.06x` with pointed ears; toggle `BOY`/`GIRL` hair and tunic presets. |
+| `base_human.glb`, `base_elf.glb` & `base_demon.glb` | **Quaternius: Characters - Fantasy Races** + **Modular Character Outfits - Fantasy** | Universal Humanoid Rig. Scale `base_elf` to `1.06x` with pointed ears; scale `base_demon` to `1.08x` with horn attachments; toggle `BOY`/`GIRL` hair and tunic presets. |
 | `base_dragon_humanoid.glb` | **Quaternius: Characters - Fantasy Races** (Dragonborn base) | Same Universal Humanoid Rig; attach folded back-wings in Blender. Default peaceful Dragon form (`1.05x`). |
 | `base_dragon_true.glb` | **Quaternius: Animated Dragon** (Ultimate Monsters Pack) | Lightweight rigged `.glb` (`3.8x` scale) with 8 built-in animations (`Flying_Idle`, `Fast_Flying`, `Headbutt`, `Death`, etc.). |
 | `base_beasthuman_agile.glb` & `base_beasthuman_heavy.glb` | **Quaternius: Characters - Fantasy Races** (Orc/Goblin/Humanoid bases) | Same Universal Humanoid Rig. Bone-scale presets: `CAT_KIN`/`WOLF_KIN` (`0.98x`), `DWARF` (`0.75x H / 1.15x W`), `BARBARIAN`/`BEAR_KIN` (`1.18x H / 1.25x W`). |
@@ -142,4 +143,4 @@ All `60–120` pooled mortals are driven by **6 lightweight base rigs** (`600–
 3. **Build in 3 Vertical Slices (Phase 5 of `IMPLEMENTATION_ROADMAP.md`):**
    - **Slice A (World & Terrain):** `Terrain3D` 4 biomes + export `data/world_heightmap.npy` + `Sky3D` (with night ambient floor) + global `season_progress` shader + `16×16m` parcel border overlay.
    - **Slice B (Reality Bubble & Orbital Map):** Pre-allocated pool of `120` mortals from the 6 base rigs, stage/race bone scaling, `mortal_toon.gdshader` instance uniforms, Animation LOD, Dragon metamorphosis toggle, and `MultiMeshInstance3D` Orbital Map driven by Python's binary `PackedFloat32Array` WebSocket feed.
-   - **Slice C (Landmarks, Deities & UI):** Snap together the World Library (with 2D `TextEdit` modal routed to Python), WTC (`UPDATE_ONCE` SubViewport boards), Grand Cathedral, Courthouse, `AltarPrayerBeacon`, the 6 VRoid Divine Heroes, and the In-Godot Divine Family HUD.
+   - **Slice C (Landmarks, Deities & UI):** Snap together the World Library (with 2D `TextEdit` modal routed to Python), WTC (`UPDATE_ONCE` SubViewport boards), Grand Cathedral, Courthouse, `AltarPrayerBeacon`, the 7 VRoid Divine Heroes, and the In-Godot Divine Family HUD.

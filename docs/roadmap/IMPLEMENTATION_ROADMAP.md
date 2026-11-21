@@ -72,12 +72,12 @@ Build strictly in phase order (`Phase 0` through `Phase 5`). **Do not advance to
 
 ---
 
-## Phase 3: Headless Unbounded 4-Race Civilization Core
-**Goal:** Run a complete multi-generational 4-race civilization headlessly via `MockWorldAdapter`—verifying cross-species pregnancy, Age-10 mixed-race patronage choice, Dragon metamorphosis & deterrence, Divine Family & Sister Councils, realistic crying/comforting, naming, Elder Council World Library, bordered polities & Neutral Free Cities, double-entry economy & inflation, probate/escheatment, Judiciary, and pure end-of-day atomic saves.
+## Phase 3: Headless Unbounded 5-Race Civilization Core
+**Goal:** Run a complete multi-generational 5-race civilization headlessly via `MockWorldAdapter`—verifying cross-species pregnancy, Age-10 mixed-race patronage choice, Dragon metamorphosis & deterrence, Demon generational Dragon deterrence & out-group hostility prior, Divine Family & 5-Sister Councils, realistic crying/comforting, naming, Elder Council World Library, bordered polities & Neutral Free Cities, double-entry economy & inflation, probate/escheatment, Judiciary, and pure end-of-day atomic saves.
 
 ### Deliverables
 - `sim_core/bridge/base.py` & `sim_core/bridge/mock_adapter.py`.
-- `sim_core/divine/hierarchy.py` (World Goddess + 4 Racial God-Mothers, custom naming, personality vectors, Divine Energy/cooldowns, Non-Aggression Covenant, Oracles `1–3`/race) & `sim_core/divine/sister_council.py` (1-on-1 & 4-Sister Council dialogue, Divine Truces, World Goddess mediation).
+- `sim_core/divine/hierarchy.py` (World Goddess + 5 Racial God-Mothers, custom naming, personality vectors, Divine Energy/cooldowns, Non-Aggression Covenant, Oracles `1–3`/race) & `sim_core/divine/sister_council.py` (1-on-1 & 5-Sister Council dialogue, Divine Truces, World Goddess mediation).
 - `sim_core/society/naming.py` (racial/gender/cultural phoneme birth names, dynasties, adult self-naming & epithets).
 - `sim_core/society/borders.py` (explicit non-overlapping `16×16m` chunk borders, 5-tier `SETTLEMENT_APPEAL` & `NEUTRAL_FREE_CITY` appeals).
 - `sim_core/society/seasons.py`, `sim_core/society/rumors.py`, `sim_core/society/morality.py`.
@@ -85,22 +85,22 @@ Build strictly in phase order (`Phase 0` through `Phase 5`). **Do not advance to
 - `sim_core/society/property.py` (`16×16m` parcels, buy/sell/rent, deterministic probate & settlement/wilderness escheatment).
 - `sim_core/society/politics.py` (`VILLAGE -> TOWN -> CITY -> STATE -> NATION`, Neutral Free Cities, Kings, Elections, Wars).
 - `sim_core/society/religion.py` (birth imprinting, strict routing to God-Mother/World Goddess only, intent-scaled prayer gains, inactivity decay, Popes, congregational altar prayers with Prayer Head).
-- `sim_core/society/library.py` (World Library + 2-elder-per-nation `> 50%` consensus Council).
+- `sim_core/society/library.py` (Two-Book Governance: `world_library` + `divine_codex` with Option B split write authority).
 - `sim_core/society/judiciary.py` & `sim_core/society/traditions.py`.
 - `sim_core/lifecycle.py` (race-specific gestation, cross-species 50% conception / 60% birth survival, Age-10 mixed-race patronage choice + tie-break, Dragon metamorphosis, injury/illness, root-cause infant distress/crying, gradual comforting, stage gates, permanent death).
 - `sim_core/engine.py` (Multi-Tier LOD scheduler, World Goddess day-end atomic commit trigger, `speed 1x..60x`, graceful `SIGINT`/`SIGTERM` shutdown).
-- `sim_core/tools/soak_test.py` (1,500-agent 4-race headless soak + atomic end-of-day & corruption-rewind verifier).
+- `sim_core/tools/soak_test.py` (1,500-agent 5-race headless soak + atomic end-of-day & corruption-rewind verifier).
 
 ### Acceptance Tests (`tests/test_races_gender_pregnancy_dragon_morph.py`, `tests/test_divine_hierarchy_patronage_and_councils.py`, `tests/test_lifecycle_crying_and_naming.py`, `tests/test_economy_double_entry_inflation.py`, `tests/test_politics_borders_library_religion.py`)
-- [ ] **Cross-Species Mating & Gestation:** Across 1,000 seeded cross-species pairings, empirical conception rate converges to `~50%`, birth survival converges to `~60%` (stillbirths log `BIRTH_COMPLICATION` with zero tensor slot allocated), and gestation duration matches the mother's `RaceProfile.gestation_days`.
-- [ ] **Age-10 Mixed-Race Patronage Choice:** Mixed-race child remains uncommitted until biological age 10; active choice locks target God-Mother; non-choice auto-allocates higher affinity; exact tie escalates to **World Goddess** to assign and logs decree.
-- [ ] **Dragon Metamorphosis & Deterrence:** Provoked Adult Dragon shifts `HUMANOID_DRAGON -> TRUE_DRAGON` (`SELF_DEFENSE`, zero domestic crime), emits fear aura, drains stamina at `1.8x`, reverts when threat clears, and witnesses spread Rumor Packets.
-- [ ] **Divine Family & Non-Aggression Covenant:** Mortals cannot pray directly to God; offensive rival-civilian miracle by a God-Mother is blocked by `WorldGoddessCritic` (`covenant_rebukes += 1`) and triggers Sister Council / World Goddess mediation; Divine Truce blocks wartime boosts.
-- [ ] **Realistic Crying & Comforting:** Hungry/injured infant crosses `distress >= 0.45` (`crying=True`); parent comforting reduces distress gradually, but infant keeps crying until hunger/injury is actually resolved.
+- [x] **Cross-Species Mating & Gestation:** Across 1,000 seeded cross-species pairings, empirical conception rate converges to `~50%`, birth survival converges to `~60%` (stillbirths log `BIRTH_COMPLICATION` with zero tensor slot allocated), and gestation duration matches the mother's `RaceProfile.gestation_days`.
+- [x] **Age-10 Mixed-Race Patronage Choice:** Mixed-race child remains uncommitted until biological age 10; active choice locks target God-Mother; non-choice auto-allocates higher affinity; exact tie escalates to **World Goddess** to assign and logs decree.
+- [x] **Dragon Metamorphosis & Deterrence:** Provoked Adult Dragon shifts `HUMANOID_DRAGON -> TRUE_DRAGON` (`SELF_DEFENSE`, zero domestic crime), emits fear aura, drains stamina at `1.8x`, reverts when threat clears, and witnesses spread Rumor Packets.
+- [x] **Divine Family & Non-Aggression Covenant:** Mortals cannot pray directly to God; offensive rival-civilian miracle by a God-Mother is blocked by `WorldGoddessCritic` (`covenant_rebukes += 1`) and triggers Sister Council / World Goddess mediation; Divine Truce blocks wartime boosts.
+- [x] **Realistic Crying & Comforting:** Hungry/injured infant crosses `distress >= 0.45` (`crying=True`); parent comforting reduces distress gradually, but infant keeps crying until hunger/injury is actually resolved.
 - [ ] **Dynamic Faith & Altar Prayers:** Earnest prayer increases `faith_devotion` more than parent-directed prayer; `> 2` days without praying decays affinity; `10` mortals at an altar emit **1 unified congregational message** spoken by the Prayer Head (prioritizing Oracle → Cleric → Elder).
-- [ ] **Elder Council Library & Bordered Appeals:** Library proposal passes only when `approvals * 2 > total_appointed_elders`; Settlement appeal succeeds only when pop/parcel/treasury thresholds are met with non-overlapping borders; multi-racial City (`>= 2` races at `>= 15%`) qualifies for `NEUTRAL_FREE_CITY` (`war_exempt = True`).
+- [ ] **Two-Book Governance & Bordered Appeals:** Mortal World Library proposal passes Elders (`>50%`) → 1 God-Mother approval starts 1-day objection window → commits if `<3` objections; blocked if `>=3/5` objections (appealable to Goddess/God); 0 approvals in 30 days auto-expires; World Goddess + 1 Daughter succeeds; 3/5 Daughters alone succeeds; 2/5 Daughters fails; Divine Codex non-mechanical decrees require World Goddess + 3/5 Daughters; parameter overrides proposed by Goddess (alone) or 5/5 Daughters to God, applied only by God; Settlement appeal succeeds only when pop/parcel/treasury thresholds are met with non-overlapping borders; multi-racial City (`>= 2` races at `>= 15%`) qualifies for `NEUTRAL_FREE_CITY` (`war_exempt = True`).
 - [ ] **Closed-Loop Conservation, Inflation & Escheatment:** Total credits across all accounts + World Bank reserve remain strictly conserved across 600 ticks; Winter + war borrowing raises WTC `CPI`; heirless settlement death escheats parcel to treasury, wilderness death flips to `UNCLAIMED`.
-- [ ] **1,500-Agent 4-Race Soak + Atomic Rewind:** `uv run python -m sim_core.tools.soak_test --ticks 600 --agents 1500 --verify-atomic-rewind` passes with zero errors and verifies zero mid-day disk writes.
+- [ ] **1,500-Agent 5-Race Soak + Atomic Rewind:** `uv run python -m sim_core.tools.soak_test --ticks 600 --agents 1500 --verify-atomic-rewind` passes with zero errors and verifies zero mid-day disk writes.
 
 ---
 
@@ -126,25 +126,25 @@ Run `uv run python scripts/interactive_toolchain_setup.py`. With explicit user c
 1. Verify/install **Blender** (`sudo dnf install blender`), **Godot 4.7.2** (Linux x86_64), and **VRoid Studio** (via Steam/Proton).
 2. Download and extract Godot addons into `godot_client/addons/`: **Terrain3D v1.1.0**, **Sky3D v2.1**, **VRM Importer & MToon Shader v2.6.1**.
 3. Download and organize free CC0 packs into `godot_client/assets/`: **Quaternius** (`Characters - Fantasy Races`, `Modular Character Outfits - Fantasy`, `Universal Animation Library 1 & 2`, `Medieval Village MegaKit`, `Fantasy Props MegaKit`, `Ghibli Game Kit`, `Ultimate Stylized Nature MegaKit`, `Animated Dragon`), **KayKit** (`Dungeon Pack 1.1`), and **Kenney** (`Particle Pack`, `Audio Packs`).
-4. Guide creation/export of the **6 VRoid Divine Hero `.vrm` models** using VRoid Studio's built-in **Reduce Polygons + Combine Meshes** preset (no Blender Decimate on rigged VRMs; Blender used solely for bone-parenting props/wings/horns).
+4. Guide creation/export of the **7 VRoid Divine Hero `.vrm` models** using VRoid Studio's built-in **Reduce Polygons + Combine Meshes** preset (no Blender Decimate on rigged VRMs; Blender used solely for bone-parenting props/wings/horns).
 
 ### Vertical Slice A: World, Terrain3D, Sky3D & Parcel Grid
-- Sculpt the 4 racial biomes + flat landmark pads in `Terrain3D v1.1.0`; export `data/world_heightmap.npy` for Python elevation sync.
+- Sculpt the 5 racial biomes + flat landmark pads in `Terrain3D v1.1.0`; export `data/world_heightmap.npy` for Python elevation sync.
 - Configure `Sky3D v2.1` synced to Python's `WORLD_TIME_WEATHER` (1–2 real-hour day) with a readable moonlight/ambient floor in `WorldEnvironment`.
 - Implement global `season_progress` toon shader uniform (Spring → Autumn → Winter frost) and `16×16m` parcel border decal/overlay.
 
 ### Vertical Slice B: Pooled 120-Mortal Reality Bubble, Dragon Morph & Orbital Map
-- Pre-allocate `120` pooled mortal scenes (`visible = false`) from the **6 Quaternius base rigs** with stage/race bone scaling, `mortal_toon.gdshader` instance uniforms (`skin_hsv`, `cloth_primary`, `cloth_secondary`, `injury_mix`), shared `SkeletonProfileHumanoid` animations, `InfantTears` crying VFX, and **Animation LOD** (`60 Hz` / `20 Hz` / `10 Hz`).
+- Pre-allocate `120` pooled mortal scenes (`visible = false`) from the **7 Quaternius base rigs** with stage/race bone scaling, `mortal_toon.gdshader` instance uniforms (`skin_hsv`, `cloth_primary`, `cloth_secondary`, `injury_mix`), shared `SkeletonProfileHumanoid` animations, `InfantTears` crying VFX, and **Animation LOD** (`60 Hz` / `20 Hz` / `10 Hz`).
 - Wire `scripts/dragon_morph.gd` zero-stutter `HUMANOID_DRAGON` $\leftrightarrow$ `TRUE_DRAGON` visibility toggle + `MetamorphosisBurst.tscn`.
 - Implement the **Orbital God Map** (`MultiMeshInstance3D`, 1 draw call for `10,000+` agents) activating above `250m` altitude, fed directly by Python's binary `PackedFloat32Array` WebSocket stream, with click-to-swoop back into 3D.
 
-### Vertical Slice C: Institutional Landmarks, 6 VRoid Deities & In-Godot Divine HUD
+### Vertical Slice C: Institutional Landmarks, 7 VRoid Deities & In-Godot Divine HUD
 - Assemble walk-in landmarks: **World Library** (clicking Lecterns opens 2D `TextEdit` modal sending `GOD_LIBRARY_EDIT` over WebSocket—never touching SQLite), **World Trade Centre** & **Courthouse** (`UPDATE_ONCE` `SubViewport` hanging signs redrawn only on `SIGN_UPDATE`), **Grand Cathedral**, and **`AltarPrayerBeacon.tscn`** skyward light pillars.
-- Import the **6 VRoid Divine Heroes** (`god_avatar.vrm` with `DivineAura.tscn`, `world_goddess.vrm`, and the 4 Racial God-Mothers).
+- Import the **7 VRoid Divine Heroes** (`god_avatar.vrm` with `DivineAura.tscn`, `world_goddess.vrm`, and the 5 Racial God-Mothers).
 - Build `scripts/divine_hud.gd` displaying live World Goddess & God-Mother messages, Inter-Sister Council logs, `ErrorHealer` alerts, deity naming, and `speed 1x..60x` controls.
 
 ### Phase 5 Acceptance Tests
-- [ ] Hybrid RTS / 3rd-person `God` camera smoothly pools `60–120` animated mortals across all 4 races within `120–160m` at stable frame rates on Radeon 780M (MSAA 2x, 2048px shadows) with zero runtime `instantiate()`/`queue_free()` stutter.
+- [ ] Hybrid RTS / 3rd-person `God` camera smoothly pools `60–120` animated mortals across all 5 races within `120–160m` at stable frame rates on Radeon 780M (MSAA 2x, 2048px shadows) with zero runtime `instantiate()`/`queue_free()` stutter.
 - [ ] Zooming above `250m` transitions seamlessly to the 1-draw-call `MultiMeshInstance3D` Orbital God Map showing `10,000+` moving agents and `16×16m` nation borders; clicking any city swoops smoothly back into 3D.
 - [ ] Provoked Dragon morphs cleanly to `TRUE_DRAGON` with `MetamorphosisBurst`; crying infants display `InfantTears` + `cry_distress` animation; active congregational altars project `AltarPrayerBeacon`.
 - [ ] Editing a World Library book in Godot's 2D modal sends `GOD_LIBRARY_EDIT` over WebSocket to Python RAM (zero direct SQLite access from Godot) and persists cleanly during the World Goddess's atomic end-of-day SHA-256 commit.

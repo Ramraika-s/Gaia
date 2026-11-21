@@ -1,4 +1,4 @@
-# RACES_AND_BIOLOGY_SPEC.md — The 4 Races, Binary Gender, Sub-Lineages, Cross-Species Pregnancy, Dragon Metamorphosis & Inter-Racial Dynamics 
+# RACES_AND_BIOLOGY_SPEC.md — The 5 Races, Binary Gender, Sub-Lineages, Cross-Species Pregnancy, Dragon Metamorphosis & Inter-Racial Dynamics 
 
 ## 1. Core Biological Invariants (`sim_core/races.py`)
 All mortal agents across the civilization adhere to three foundational biological contracts:
@@ -9,13 +9,13 @@ All mortal agents across the civilization adhere to three foundational biologica
    - Mating and conception strictly require opposite biological genders (`P1.gender != P2.gender`), enforced by `WorldGoddessCritic`.
 2. **Extensible `RaceProfile` Multiplier Layer (Zero Neural Tensor Bloat):**
    - Racial biology, lifespans, gestation durations, neuroplasticity, combat power, seasonal resilience, and 3D bone scaling live in a deterministic **`RACE_REGISTRY`** (`sim_core/races.py`) rather than hardcoding race-specific dimensions into `SharedSkillNet` or `BatchedAgentSelfNet`.
-   - This keeps neural checkpoints 100% compatible across all 4 races, Beasthuman sub-lineages, mixed-heritage offspring, and any future races added later.
+   - This keeps neural checkpoints 100% compatible across all 5 races, Beasthuman sub-lineages, mixed-heritage offspring, and any future races added later.
 3. **1-to-1 Divine Patronage:**
-   - Each of the 4 races is watched over by its own **Racial God-Mother** (one of the 4 Daughters of God & the World Goddess; see `docs/simulation/DIVINE_HIERARCHY_SPEC.md`).
+   - Each of the 5 races is watched over by its own **Racial God-Mother** (one of the 5 Daughters of God & the World Goddess; see `docs/simulation/DIVINE_HIERARCHY_SPEC.md`).
 
 ---
 
-## 2. The 4 Races & Anime-Fantasy Profiles
+## 2. The 5 Races & Anime-Fantasy Profiles
 
 ### 2.1 Master Multiplier Table
 
@@ -28,6 +28,7 @@ All mortal agents across the civilization adhere to three foundational biologica
 | **`BEASTHUMAN: DWARF`** | `125` | `1.5x` | **`2.2`** | `1.4x` | `0.95x` | **`1.60x`** | `base_beasthuman_heavy.glb` (`0.75x H / 1.15x W`) | Mountain Foothills / Deep Mines |
 | **`BEASTHUMAN: WOLF_KIN`** | `115` | `1.1x` | **`1.4`** | `1.1x` | `1.00x` | `1.35x` | `base_beasthuman_agile.glb` (`1.02x`) | Steppe / Taiga / Frontier |
 | **`BEASTHUMAN: BARBARIAN / BEAR_KIN`** | `145` | `1.1x` | **`1.8`** | `1.2x` | `0.95x` | `1.45x` | `base_beasthuman_heavy.glb` (`1.18x H / 1.25x W`) | Northern Steppe / Highlands |
+| **`DEMON`** | **`120`** | **`2.8x`** | **`4.0`** | `2.2x` | `1.05x` | **`1.50x`** | `base_demon.glb` (`1.08x`) | Volcanic / Ashland Crags & Obsidian Chasms |
 
 *(Gestation durations scale proportionally to each race's lifespan and the 28-Game-Day calendar year; configurable in `sim_core/config.py`.)*
 
@@ -57,6 +58,15 @@ All Beasthuman sub-lineages share **one Racial God-Mother**, share full intra-ra
 - **`DWARF`:** Longer gestation (`2.2` days), stocky build (`0.75x H / 1.15x W`), extreme `mine_stone` (`+35%`), `craft` (`+35%`), and `build` (`+25%`) mastery, high Winter resistance (`1.60x`), fierce guild/property loyalty (`rule_respect +0.25`, `loyalty +0.30`).
 - **`WOLF_KIN`:** Gestation `1.4` days, high pack coordination (`loyalty +0.35`, `sociability +0.20` within clan), fast pursuit/scouting (`1.12x` speed), strong border patrols.
 - **`BARBARIAN` / `BEAR_KIN`:** Gestation `1.8` days, high stamina and base health (`145`), strong cold resistance (`1.45x`), honor-driven frontier settlers and formidable melee defenders (`defend +25%`).
+
+#### 5. Demons (`DEMON` — Unified Race, No Sub-Lineages)
+- **Biology & Learning:** Lifespan `2.8x` (between Elf and Dragon), gestation `4.0` days, robust demonic constitution (`120` HP), high combat and magic/crafting proficiency, and strong winter resistance (`1.50x` native to volcanic/ashland crags).
+- **Trait Priors & Emergent Temperament:**
+  - `ambition +0.20`, `caution +0.10`, `loyalty +0.20`, `rule_respect -0.10`.
+  - **Out-Group Hostility Bias:** Baseline initial suspicion and aggression bias toward non-Demon races, subject to per-agent Gaussian variation ($\mathcal{N}(0, 0.08)$) and lifetime reinforcement so peaceful, diplomatic, and trade-oriented Demons still emerge organically (preserving the NO global `good_vs_evil` scalar invariant).
+  - **Generational Dragon Deterrence:** Because Dragons possess overwhelming apex strength (`650` HP in True Dragon form), Demons carry a strong learned/generational caution bias (`dragon_deterrence_bias`) and actively avoid provoking Dragons unless forced by immediate self-defense.
+  - **High Reverence for `gm_demon`:** Demonstrates elevated baseline devotion/affinity toward the Demon God-Mother (`gm_demon`).
+- **Social & Political Style:** Forgers of volcanic obsidian weapons, masters of abyssal metallurgy and dark enchanting. Form hierarchical volcanic strongholds and disciplined martial clans that selectively engage in external trade at the WTC.
 
 ---
 
@@ -92,7 +102,7 @@ Shifts back to `HUMANOID_DRAGON` once no hostile threat remains within `48m` for
 ## 4. Mating, Race-Specific Pregnancy & Cross-Species Reproduction
 
 ### 4.1 Universal Opposite-Gender Compatibility (Cross-Species Allowed)
-All 4 races (`HUMAN`, `ELF`, `DRAGON`, `BEASTHUMAN`) **can mate with each other**, provided all biological and social prerequisites hold (validated by `WorldGoddessCritic`):
+All 5 races (`HUMAN`, `ELF`, `DRAGON`, `BEASTHUMAN`, `DEMON`) **can mate with each other**, provided all biological and social prerequisites hold (validated by `WorldGoddessCritic`):
 - **Strict Binary Gender Rule:** `P1.gender != P2.gender` (strictly one `BOY` and one `GIRL`).
 - **Readiness:** Both are `ADULT`, alive, within `5m`, disjoint `parent_ids`, not currently pregnant (`mother.pregnant_ticks_remaining == 0`), `health >= 70%` of `max_health`, `hunger >= 60`, `breeding_cooldown == 0`, mutual `affinity >= 0.6`, and `trust >= 0.5`.
 - **Dragon Mating Constraint:** Dragons must be in `HUMANOID_DRAGON` form when mating with non-dragon races.
@@ -110,7 +120,7 @@ All 4 races (`HUMAN`, `ELF`, `DRAGON`, `BEASTHUMAN`) **can mate with each other*
 ### 4.3 Race-Specific Pregnancy (Gestation) Mechanics
 Once conception succeeds, the female (`GIRL`) enters a tracked **pregnancy state** in RAM (`pregnant_ticks_remaining`, `father_id`, `is_cross_species_pregnancy`):
 - **Gestation Duration:** Determined strictly by the **mother's** `RaceProfile.gestation_days` converted to sim ticks (`gestation_days * TICKS_PER_GAME_DAY`):
-  - `CAT_KIN`: `1.2` days | `WOLF_KIN`: `1.4` days | `HUMAN`: `1.5` days | `BARBARIAN`/`BEAR_KIN`: `1.8` days | `DWARF`: `2.2` days | `ELF`: `4.0` days | `DRAGON`: `7.0` days.
+  - `CAT_KIN`: `1.2` days | `WOLF_KIN`: `1.4` days | `HUMAN`: `1.5` days | `BARBARIAN`/`BEAR_KIN`: `1.8` days | `DWARF`: `2.2` days | `DEMON`: `4.0` days | `ELF`: `4.0` days | `DRAGON`: `7.0` days.
 - **Maternal Metabolic Cost:** During pregnancy, the mother experiences `1.15x` hunger drain and `0.90x` movement speed—encouraging partners, kin, and settlement welfare to keep her fed and sheltered.
 - **Maternal Mortality:** If the mother dies before `pregnant_ticks_remaining` reaches `0`, the pregnancy ends immediately with her death.
 - **Delivery (`BIRTH` Commit):** When `pregnant_ticks_remaining == 0`, the engine evaluates the birth survival roll (`0.60` if `is_cross_species_pregnancy`, else baseline). On survival, `WorldGoddessCritic` commits `BIRTH`, allocates a neural slot, and spawns the `INFANT`.
@@ -141,9 +151,10 @@ Distinct racial skill bonuses naturally drive **inter-racial trade** rather than
 - **Elves (`ELF`):** Dominate `food`, forest herbs, and sustainable timber—becoming critical suppliers during harsh Winters.
 - **Humans (`HUMAN`):** Dominate WTC logistics, World Bank finance, urban construction, and high-velocity commerce.
 - **Dragons (`DRAGON`):** Control rare high-altitude mountain ores and ancient knowledge—trading occasionally in `HUMANOID_DRAGON` form for refined goods or peace accords.
+- **Demons (`DEMON`):** Dominate obsidian metallurgy, dark enchanting, advanced weaponry, and resilient ashland masonry—trading for food, fine textiles, and alchemical elixirs.
 
 ### 5.2 Cultural Friction & Neutral Free Cities
-- **Natural Friction:** Human expansion into Elven forests, Dwarf mining disputes with mountain Dragons, or Beasthuman clan border raids create organic diplomatic tensions that also spill upward into **Inter-Sister Council** debates among the 4 Racial God-Mothers.
+- **Natural Friction:** Human expansion into Elven forests, Dwarf mining disputes with mountain Dragons, Demon territorial assertiveness in ashland crags, or Beasthuman clan border raids create organic diplomatic tensions that also spill upward into **Inter-Sister Council** debates among the 5 Racial God-Mothers.
 - **Neutral Free Cities:** Any `CITY` holding significant living populations of **`>= 2` races** (each `>= 15%` of city pop) may submit a `SETTLEMENT_APPEAL(requested_status="NEUTRAL_FREE_CITY")` to the **World Goddess**. Approved Neutral Free Cities:
   - Are legally barred from declaring offensive wars (`war_exempt = true`).
   - Serve as ideal neutral hosts for **WTC Regional Hubs**, **World Library Branches**, and multi-racial communities where inter-racial families and peaceful `HUMANOID_DRAGON` citizens live safely side-by-side.
@@ -157,7 +168,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 Gender = Literal["BOY", "GIRL"]
-RaceId = Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN"]
+RaceId = Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"]
 BeasthumanSubLineage = Literal["CAT_KIN", "DWARF", "WOLF_KIN", "BARBARIAN", "BEAR_KIN"]
 DragonForm = Literal["HUMANOID_DRAGON", "TRUE_DRAGON"]
 
@@ -167,7 +178,7 @@ CROSS_SPECIES_BIRTH_SURVIVAL_CHANCE: float = 0.60
 class RaceProfile(BaseModel):
     race_id: RaceId
     sub_lineage: Optional[BeasthumanSubLineage] = None
-    patron_godmother_slot: str             # "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman"
+    patron_godmother_slot: str             # "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"
     base_max_health: float = 100.0
     lifespan_multiplier: float = 1.0
     gestation_days: float = 1.5            # Pregnancy duration in Game Days (mother's race)
@@ -183,6 +194,6 @@ class RaceProfile(BaseModel):
     skill_affinities: dict[str, float] = Field(default_factory=dict)
     trait_priors: dict[str, float] = Field(default_factory=dict)
     compatible_breeding_races: list[RaceId] = Field(
-        default_factory=lambda: ["HUMAN", "ELF", "DRAGON", "BEASTHUMAN"]
+        default_factory=lambda: ["HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"]
     )
 ```

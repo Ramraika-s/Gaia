@@ -1,4 +1,5 @@
 .agents/*
+
 # Godot 4 generated cache & build artifacts
 .godot/
 *.translation
@@ -16,12 +17,19 @@ __pycache__/
 dist/
 build/
 
+# Runtime data & atomic rollback snapshots
+data/
+.qa_loop/
+*.restore_tmp
+
 # Blender backup & temporary files
 *.blend1
 *.blend2
 *.blend@
 
-# Local QA loop / OS noise
-.qa_loop/
+# Local OS noise
 .DS_Store
 Thumbs.db
+
+#godot stuff
+godot_client

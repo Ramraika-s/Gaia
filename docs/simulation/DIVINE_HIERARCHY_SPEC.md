@@ -1,11 +1,11 @@
-# DIVINE_HIERARCHY_SPEC.md — God, World Goddess, 4 Racial God-Mothers, Patronage, Councils & God Ledger 
+# DIVINE_HIERARCHY_SPEC.md — God, World Goddess, 5 Racial God-Mothers, Patronage, Councils & God Ledger 
 
 ## 1. The Three-Tier Divine Family Hierarchy (`sim_core/divine/`)
 The civilization is overseen by a structured divine family that cleanly separates **player administration**, **world-level stability & persistence**, and **racial patronage**:
 
 ```text
                        [ GOD (Admin / You) ]
-          Bestows custom names on the Goddess & 4 Daughters
+          Bestows custom names on the Goddess & 5 Daughters
           Receives messages ONLY from Goddess & God-Mothers
                                  │
                                  ▼
@@ -14,14 +14,14 @@ The civilization is overseen by a structured divine family that cleanly separate
          • Owns God Ledger (data/god_ledger/day_XXXXX.md)
          • Supervises Self-Healing Error Solver & Global Critic
          • Adjudicates Settlement Appeals & Mixed-Race Tie-Breaks
-         • Mediates disputes between her 4 Daughters
+         • Mediates disputes between her 5 Daughters
                                  │
-      ┌──────────────────┬───────┴──────────┬──────────────────┐
-      ▼                  ▼                  ▼                  ▼
-[Human Mother]     [Elf Mother]      [Dragon Mother]   [Beasthuman Mother]
-  (Daughter)        (Daughter)         (Daughter)          (Daughter)
-      │                  │                  │                  │
-      └────────────► Inter-Sister Council / Chat ◄─────────────┘
+      ┌───────────┬──────────────┼──────────────┬───────────┐
+      ▼           ▼              ▼              ▼           ▼
+[Human Mother] [Elf Mother] [Dragon Mother] [Beasthuman] [Demon Mother]
+  (Daughter)   (Daughter)     (Daughter)     (Daughter)    (Daughter)
+      │           │              │              │           │
+      └───────────┴────────► 5-Sister Council ◄─┴───────────┘
 ```
 
 ### 1.1 God-Bestowed Naming
@@ -31,14 +31,15 @@ The civilization is overseen by a structured divine family that cleanly separate
   - `gm_elf` — Daughter 2, Patron of Elves (`gm_elf.vrm`)
   - `gm_dragon` — Daughter 3, Patron of Dragons (`gm_dragon.vrm`)
   - `gm_beasthuman` — Daughter 4, Patron of Beasthumans (`gm_beasthuman.vrm`)
+  - `gm_demon` — Daughter 5, Patron of Demons (`gm_demon.vrm`)
 - All mortal prayers, altar invocations, Sister Council transcripts, Godot HUD alerts, and `data/god_ledger/day_XXXXX.md` archives dynamically use the exact names bestowed by God.
 
 ### 1.2 Role Separation
 | Tier | Core Responsibilities | Hard Limits |
 | :--- | :--- | :--- |
-| **God (Admin / You)** | Names deities; explores the 3D Godot Reality Bubble (`god_avatar.vrm`, `is_god = true`) & Orbital Map; issues decrees (`bypass_god_check=True`); edits World Library books or WTC controls; sets simulation `speed 1x..60x`. | **Mortals cannot pray directly to God.** God receives messages *exclusively* from the World Goddess and the 4 Racial God-Mothers. |
-| **World Goddess (Wife of God)** | Global critic (`WorldGoddessCritic`); sole executor of **atomic end-of-day SHA-256 commits** and `data/god_ledger/day_XXXXX.md`; supervises `ErrorHealer`; adjudicates `SETTLEMENT_APPEAL`s, Neutral Free Cities, and Age-10 mixed-race patronage tie-breaks; mediates sisterly disputes; summarizes the world for God. | Does not favor one race over another; intervenes directly only for world stability, mediation, or explicit covenant violations. |
-| **4 Racial God-Mothers (Daughters)** | Patron deities of their respective races; receive racial prayers & altar petitions; perform restricted, restrained mortal blessings; appoint `1–3` Mortal Oracles/Champions; debate in 1-on-1 or 4-Sister Councils; escalate major racial events to God or the World Goddess. | Bound by finite **Divine Energy**, intervention cooldowns, personality-driven **restraint**, and the **Non-Aggression Covenant**. |
+| **God (Admin / You)** | Names deities; explores the 3D Godot Reality Bubble (`god_avatar.vrm`, `is_god = true`) & Orbital Map; issues decrees (`bypass_god_check=True`); sole authority to write/approve engine-parameter overrides in `divine_codex`; direct edit on `world_library`; sets simulation `speed 1x..60x`. | **Mortals cannot pray directly to God.** God receives messages *exclusively* from the World Goddess and the 5 Racial God-Mothers. |
+| **World Goddess (Wife of God)** | Global critic (`WorldGoddessCritic`); sole executor of **atomic end-of-day SHA-256 commits** and `data/god_ledger/day_XXXXX.md`; supervises `ErrorHealer`; adjudicates `SETTLEMENT_APPEAL`s, Neutral Free Cities, and Age-10 mixed-race patronage tie-breaks; mediates sisterly disputes; summarizes the world for God; may edit `world_library` with `>= 1` Daughter; may commit text decrees to `divine_codex` with `>= 3/5` Daughters; submits parameter override proposals to God. | Does not favor one race over another; cannot apply live engine-parameter overrides directly to `divine_codex` (must submit proposal to God). |
+| **5 Racial God-Mothers (Daughters)** | Patron deities of their respective races; receive racial prayers & altar petitions; perform restricted, restrained mortal blessings; appoint `1–3` Mortal Oracles/Champions; debate in 1-on-1 or 5-Sister Councils; escalate major racial events to God or World Goddess; vote on mortal `world_library` proposals; may edit `world_library` alone if `> 50%` (`>= 3/5`); all 5 unanimously (`5/5`) may propose parameter overrides to God. | Bound by finite **Divine Energy**, intervention cooldowns, personality-driven **restraint**, and the **Non-Aggression Covenant**; cannot apply engine-parameter overrides directly; mortal proposals require consensus. |
 
 ---
 
@@ -88,7 +89,7 @@ Cross-species children (`secondary_heritage_race is not None`) follow a determin
 ## 3. Racial God-Mothers: Personality, Divine Energy, Restraint & Covenants (`sim_core/divine/hierarchy.py`)
 
 ### 3.1 Personality Vectors & Finite Divine Energy
-Each of the 4 Racial God-Mothers operates as a lightweight, deterministic-plus-stateful autonomous agent in RAM (zero LLM overhead) with:
+Each of the 5 Racial God-Mothers operates as a lightweight, deterministic-plus-stateful autonomous agent in RAM (zero LLM overhead) with:
 - **Personality Vector (`[0.0, 1.0]`):**
   - `compassion`: Willingness to answer individual suffering (starving infants, illness, grief).
   - `restraint`: Discipline to withhold miracles so mortals learn self-reliance.
@@ -100,6 +101,7 @@ Each of the 4 Racial God-Mothers operates as a lightweight, deterministic-plus-s
   - `gm_elf`: High `restraint 0.75`, `compassion 0.60`, `pride 0.70`, `diplomacy 0.65`, `protective_fury 0.55`.
   - `gm_dragon`: Very high `restraint 0.85`, high `pride 0.80`, `protective_fury 0.85` (only if provoked), `compassion 0.45`, `diplomacy 0.50`.
   - `gm_beasthuman`: High `protective_fury 0.75`, `compassion 0.65`, lower `restraint 0.45`, `pride 0.70`, `diplomacy 0.55`.
+  - `gm_demon`: High `protective_fury 0.80`, high `pride 0.75`, moderate `restraint 0.50`, `compassion 0.40`, `diplomacy 0.50`.
 - **Finite Divine Energy (`0.0` to `1000.0`):**
   - Replenished solely by her race's earnest prayers, gratitude, and congregational altars (plus minor passive decay above `800.0` to prevent infinite hoarding).
   - Every intervention consumes Divine Energy **and** sets a per-action cooldown (in sim ticks).
@@ -137,10 +139,10 @@ Rather than spending Divine Energy on constant miracles, each Racial God-Mother 
 ---
 
 ## 5. Inter-Sister Conversations & World Goddess Mediation (`sim_core/divine/sister_council.py`)
-The 4 Racial God-Mothers are not isolated state machines—they communicate with each other in **1-on-1 exchanges** and **4-Sister Councils** using structured, state-hydrated dialogue templates (zero LLM overhead):
+The 5 Racial God-Mothers are not isolated state machines—they communicate with each other in **1-on-1 exchanges** and **5-Sister Councils** using structured, state-hydrated dialogue templates (zero LLM overhead):
 
 ### 5.1 Triggers for Sisterly Dialogue
-- **Cross-Racial Border Friction / War:** E.g., a Human kingdom raids an Elven forest, or Dwarf miners trespass into a Dragon mountain sanctuary.
+- **Cross-Racial Border Friction / War:** E.g., a Human kingdom raids an Elven forest, Dwarf miners trespass into a Dragon mountain sanctuary, or Demon out-group raids spark border disputes.
 - **Dragon Provocation:** A `TRUE_DRAGON` retaliates against non-dragon raiders.
 - **Wartime Intervention:** One God-Mother casts `WARD_DEFENDERS` during an inter-racial war.
 - **Inter-Racial Milestones:** Founding of a **Neutral Free City**, a cross-species royal marriage, or a major WTC trade treaty.
@@ -149,21 +151,21 @@ The 4 Racial God-Mothers are not isolated state machines—they communicate with
 1. **Divine Truce (`DIVINE_TRUCE`):** Two sisters with sufficient `diplomacy` mutually agree **not** to cast wartime interventions (`WARD_DEFENDERS`) for `7` game days, letting mortals settle the conflict or negotiate peace on their own.
 2. **Sisterly Warning / Protest:** High-`pride` or high-`protective_fury` sisters warn another sister to restrain her mortals' expansion (relayed subtly to mortals via Oracles).
 3. **World Goddess Mediation:** If two sisters refuse a truce or breach the Non-Aggression Covenant, the **World Goddess (Wife of God)** convenes a mediation session—imposing a temporary intervention freeze (`cooldown` penalty) on the aggressor sister and escalating a concise report to **God**.
-4. **Archive:** Notable 1-on-1 exchanges and all 4-Sister Council resolutions are logged into the **God Ledger** so God can read the family's dynamics.
+4. **Archive:** Notable 1-on-1 exchanges and all 5-Sister Council resolutions are logged into the **God Ledger** so God can read the family's dynamics.
 
 ---
 
 ## 6. Communication Pipeline to God & `GodPresenceTracker` (`sim_core/divine/god_ledger.py`)
 
 ### 6.1 Who Speaks to God
-Only the **World Goddess** and the **4 Racial God-Mothers** may message God directly:
+Only the **World Goddess** and the **5 Racial God-Mothers** may message God directly:
 - **Racial God-Mother Reports:** Escalated urgent prayers/gratitude from their race, congregational altar petitions (with Prayer Head), Oracle appointments, border crises, or requests for Father's guidance.
 - **World Goddess Reports:** Daily civilization summaries, Settlement Status Appeals / Neutral Free City approvals, Age-10 mixed-race tie-break decrees, Sister Council mediations, `RAM_WATERMARK` warnings, and `ErrorHealer` auto-fixes / `[CRITICAL]` escalations.
 
 ### 6.2 Real-Time vs. Away Delivery (`GodPresenceTracker`)
 `GodPresenceTracker` monitors whether God is currently **Active** (connected in **Godot 4.7.2** OR attached to the **Rich God CLI**) or **Away (AFK)**:
 - **When God is Active:**
-  - High-salience reports from the World Goddess and 4 God-Mothers stream **in real time** to the In-Godot Divine Family HUD (`DIVINE_HUD_MESSAGE`) and the Rich God Terminal—while also buffering in RAM for the permanent daily archive.
+  - High-salience reports from the World Goddess and 5 God-Mothers stream **in real time** to the In-Godot Divine Family HUD (`DIVINE_HUD_MESSAGE`) and the Rich God Terminal—while also buffering in RAM for the permanent daily archive.
   - Routine solo citizen prayers are automatically aggregated into clean digests (*"68 citizens of Solis prayed to [Human Mother] for a safe harvest"*) so 10,000+ agents never spam the HUD.
 - **When God is Away (AFK):**
   - Zero mid-day disk writes. All divine reports, sisterly council dialogues, escalated prayers, gratitude notes, and `ErrorHealer` alerts accumulate strictly in RAM (`god_ledger_buffer`).
@@ -175,12 +177,13 @@ Only the **World Goddess** and the **4 Racial God-Mothers** may message God dire
 Compiled & Verified by: **[World Goddess Name]** | SHA-256 Commit: `VERIFIED`
 
 ## 1. World Goddess Summary
-- Living Population: 2,418 (Humans: 1,120 | Elves: 410 | Beasthumans: 842 | Dragons: 46)
+- Living Population: 2,418 (Humans: 1,120 | Elves: 410 | Beasthumans: 742 | Demons: 100 | Dragons: 46)
 - WTC CPI Inflation: 1.08 (+0.02) | Active Wars: 1 | Neutral Free Cities: 1
 - Mixed-Race Patronage Tie-Break: Assigned child *Lyra Ashleaf* (Human/Elf) to **[Elf Mother Name]** for forest settlement harmony.
 
-## 2. Messages from the 4 Racial God-Mothers
+## 2. Messages from the 5 Racial God-Mothers
 - **[Human Mother Name]:** "At the Altar of Solis (42 citizens), Prayer Head *Oracle Aldric* gave thanks for the autumn harvest and asked for protection along the eastern road."
+- **[Demon Mother Name]:** "Ashridge mortals raised a new obsidian shrine, seeking protection against frost and beasts."
 - **[Dragon Mother Name]:** "Human scouts entered Ashpeak without provocation; Elder *Ignis* shifted to True Dragon form to drive them back. No mortal casualties."
 
 ## 3. Inter-Sister Council Log
@@ -198,7 +201,7 @@ Compiled & Verified by: **[World Goddess Name]** | SHA-256 Commit: `VERIFIED`
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
-DeitySlot = Literal["world_goddess", "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman"]
+DeitySlot = Literal["world_goddess", "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"]
 
 class DivinePersonality(BaseModel):
     compassion: float = Field(default=0.6, ge=0.0, le=1.0)
@@ -211,7 +214,7 @@ class DivineEntityRecord(BaseModel):
     slot: DeitySlot
     bestowed_name: str                      # Custom name set by God (Admin)
     role: Literal["WORLD_GODDESS", "RACIAL_GOD_MOTHER"]
-    patron_race: Optional[Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN"]] = None
+    patron_race: Optional[Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"]] = None
     divine_energy: float = Field(default=300.0, ge=0.0, le=1000.0)
     personality: DivinePersonality = Field(default_factory=DivinePersonality)
     oracle_agent_ids: list[str] = Field(default_factory=list)  # Max 3 living Oracles
@@ -224,7 +227,7 @@ class SisterCouncilMessage(BaseModel):
     day: int
     tick: int
     sender_slot: DeitySlot
-    recipient_slots: list[DeitySlot]        # 1 sister, all 4 sisters, or ["world_goddess"]
+    recipient_slots: list[DeitySlot]        # 1 sister, all 5 sisters, or ["world_goddess"]
     topic: Literal[
         "BORDER_FRICTION", "DRAGON_PROVOCATION", "WAR_INTERVENTION",
         "DIVINE_TRUCE", "COVENANT_BREACH", "FREE_CITY_ACCORD", "GOD_ESCALATION"
@@ -232,3 +235,35 @@ class SisterCouncilMessage(BaseModel):
     summary: str
     resolution: Optional[str] = None
 ```
+
+---
+
+## 8. Two-Book Governance: World Library (`world_library`) & Divine Rules Book (`divine_codex`)
+
+The civilization engine maintains two distinct books of knowledge and law, both fully readable by all entities:
+
+### 8.1 World Library (`world_library`) — Read Access: Everyone
+Contains cumulative mortal scholarship, history, martial treatises, craft recipes, and canonized scripture.
+- **God (Admin):** Unrestricted direct write/edit anytime (`bypass_god_check=True`).
+- **World Goddess:** May edit directly if at least 1 of her 5 Daughters (`>= 1`) votes `APPROVE`.
+- **5 Daughters (God-Mothers) Alone:** May edit without the World Goddess if `> 50%` (`>= 3/5`) vote `APPROVE`.
+- **Mortals:**
+  1. Author passes `skills[topic] >= 0.70` (or `POPE` for scripture).
+  2. Must first pass `> 50%` of the Mortal Council of Appointed Elders (`approvals * 2 > total_appointed_elders`, max 2 Elders per Nation).
+  3. Passed proposals route to the 5 Racial God-Mothers:
+     - **0 approvals in 30 game days:** Auto-expires (`EXPIRED`).
+     - **`>= 1` approval:** Enters a **1-game-day objection window**.
+     - **`> 50%` (`>= 3/5`) objections** before window closes: Blocked (`BLOCKED_BY_DAUGHTERS`); may be appealed to World Goddess or God.
+     - **`< 3` objections** when window elapses: Passes and commits (`APPROVED`).
+
+### 8.2 Divine Rules Book (`divine_codex`) — Read Access: Everyone
+Stores permanent recorded divine laws/decrees (persisted in SQLite, logged to the God Ledger, referenced by Sister Councils) **and** dynamic live engine-parameter overrides (e.g., Non-Aggression Covenant penalties, Divine Truce duration, intervention cooldowns).
+
+#### Option B: Split Write Authority (Maximum Security, No Parameter Bounds)
+- **God (Admin):** Sole unrestricted direct write access (`bypass_god_check=True`) for both text decrees and unrestricted live engine-parameter overrides.
+- **World Goddess + `> 50%` (`>= 3/5`) Daughters:** May commit **non-mechanical text decrees** directly to `divine_codex`.
+- **Unrestricted Engine-Parameter Overrides & Rule Appeals:**
+  - Neither the World Goddess nor the Daughters may apply parameter overrides directly.
+  - Either the **World Goddess (alone)** OR **all 5 Daughters unanimously (`5/5`)** may submit a `DIVINE_CODEX_PROPOSAL` to **God (Admin)** via the God Ledger / Divine HUD.
+  - Only **God** can approve and apply engine-parameter overrides.
+- **5 Daughters Alone (< 5/5, or without Goddess on text decrees) & All Mortals:** Strictly blocked (`FAILURE`).

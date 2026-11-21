@@ -58,17 +58,37 @@ When an agent executes `PERFORM_TRADITION_OR_PRAY`, its `faith_devotion` (and fo
 
 ---
 
-## 3. World Library & Council of Appointed Elders (`sim_core/society/library.py`)
-Random agents **cannot** arbitrarily edit, overwrite, or delete World Library books.
+## 3. Two-Book Governance: World Library & Divine Rules Book (`sim_core/society/library.py`)
+Random agents **cannot** arbitrarily edit, overwrite, or delete knowledge or divine decrees. The world maintains two distinct books, both readable by all mortals and deities:
 
-### 3.1 Council of Appointed Elders (Strict RBAC & >50% Consensus)
+### 3.1 World Library (`world_library`) — Mortal & Divine Scholarship
+Read access is open to all mortals and deities.
 - **Appointment Limit:** Each recognized **`NATION`** may appoint **at most `2` living Elders** (`stage == "ELDER"` or senior scholar) to the **World Library Council** (committed via `SETTLEMENT_UPDATE(action="APPOINT_LIBRARY_ELDER")`).
-- **Drafting & Voting Protocol:**
-  1. Any `ADULT`/`ELDER` with `skills[topic] >= 0.70` (or a `POPE` for scripture) may submit a **Library Change Proposal** (`LIBRARY_ENTRY` draft: create, edit, or supersede an entry).
-  2. Appointed Council Elders cast votes (`APPROVE` / `REJECT` via `LIBRARY_VOTE`) based on the author's mastery, factual consistency, and alignment with their nation/faith.
-  3. **Strict >50% Consensus Rule:** **`WorldGoddessCritic`** commits the change to `world_library` **only if `approvals > (total_appointed_elders / 2)`** (e.g., if 3 nations have appointed 6 Elders, at least `4` approvals are required).
-  4. **God Override (Via Python WebSocket — Never Direct SQLite):** Only `God` (`bypass_god_check=True`, via God Console or Godot's 2D Library `TextEdit` modal emitting `GOD_LIBRARY_EDIT`) can directly edit the World Library without Council voting.
-  5. **Unauthorized Attempts:** Any random agent attempting an unauthorized Library edit receives `CriticVerdict(status="FAILURE", reason="Unauthorized: requires >50% Council of Elders consensus")`. Physical tampering or vandalism against a Library lectern/hall opens a `VANDALISM` Judiciary case.
+- **Write / Proposal Protocols:**
+  1. **God (Admin):** Unrestricted direct write/edit anytime (`bypass_god_check=True`, e.g. via God Console or Godot's 2D modal emitting `GOD_LIBRARY_EDIT`).
+  2. **World Goddess:** Direct edit with **at least 1 of the 5 Daughters** (`>= 1`) voting `APPROVE`.
+  3. **5 Daughters (God-Mothers) Alone:** Direct edit without the World Goddess if **`> 50%`** (**at least 3 of 5**) vote `APPROVE`.
+  4. **Mortals:**
+     - Author must have `skills[topic] >= 0.70` (or be `POPE` for scripture) to draft a `LibraryProposalRecord`.
+     - **Stage 1 (Elders Council):** Appointed Council Elders cast votes (`APPROVE` / `REJECT`). Must pass with **strict `> 50%` consensus** (`approvals * 2 > total_appointed_elders`).
+     - **Stage 2 (God-Mother Review):** Passed mortal proposals transition to `PENDING_GODMOTHERS`:
+       - If **0** God-Mothers approve within **30 game days**, the proposal **auto-expires** (`EXPIRED`).
+       - Once **`>= 1`** God-Mother approves, the proposal enters a **1-game-day objection window** (`OBJECTION_WINDOW`).
+       - If **`> 50%` (`>= 3/5`)** of God-Mothers object before the 1-day window closes, it is **blocked** (`BLOCKED_BY_DAUGHTERS`). Blocked proposals may be formally appealed to the **World Goddess** or **God** for final judgment.
+       - Otherwise, once the 1-day window elapses with `< 3` objections, it **passes and commits** (`APPROVED`) into `world_library`.
+  5. **Unauthorized Attempts:** Any random agent attempting an unauthorized Library edit receives `CriticVerdict(status="FAILURE")`. Vandalism against Library halls opens a `VANDALISM` Judiciary case.
+
+### 3.2 Divine Rules Book (`divine_codex`) — Divine Laws & Live Parameter Overrides
+Read access is open to all. Stores permanent recorded divine laws/decrees (persisted in SQLite, logged to the God Ledger, referenced by Sister Councils) **and** dynamic live engine-parameter overrides (e.g., Non-Aggression Covenant penalties, Divine Truce duration, intervention cooldowns).
+
+#### Option B: Split Write Authority (Maximum Security, No Parameter Bounds)
+- **God (Admin):** Sole unrestricted direct write access (`bypass_god_check=True`) for text decrees and live engine-parameter overrides.
+- **World Goddess + `> 50%` (`>= 3/5`) Daughters:** May commit **non-mechanical text decrees** directly to `divine_codex`.
+- **Unrestricted Engine-Parameter Overrides & Rule Appeals:**
+  - Neither the World Goddess nor the Daughters may apply parameter overrides directly.
+  - Either the **World Goddess (alone)** OR **all 5 Daughters unanimously (`5/5`)** may submit a `DIVINE_CODEX_PROPOSAL` to **God (Admin)** (routed via God Ledger / Divine HUD).
+  - Only **God** can approve and apply parameter overrides to the live simulation engine.
+- **5 Daughters Alone (< 5/5, or without Goddess on text decrees) & All Mortals:** Strictly blocked (`FAILURE`).
 
 ---
 
@@ -90,7 +110,7 @@ Settlements cannot silently self-declare higher status. To earn or upgrade a tit
 ### 4.2 Neutral Free Cities (Inter-Racial Diplomacy Zones)
 - Any `CITY` containing significant living populations of **`>= 2` races** (each representing `>= 15%` of living city population) may submit a `SETTLEMENT_APPEAL(requested_status="NEUTRAL_FREE_CITY")` to the **World Goddess**.
 - **Mechanical Properties:**
-  - Legally war-exempt (`war_exempt = true`): cannot declare offensive wars; attacking a Neutral Free City incurs severe standing penalties across all 4 races and triggers immediate **Inter-Sister Council** intervention.
+  - Legally war-exempt (`war_exempt = true`): cannot declare offensive wars; attacking a Neutral Free City incurs severe standing penalties across all 5 races and triggers immediate **5-Sister Council** intervention.
   - Serves as a protected cosmopolitan hub for **WTC Regional Exchanges**, **World Library Branches**, inter-racial families, and peaceful `HUMANOID_DRAGON` visitors.
 
 ### 4.3 Explicit Non-Overlapping Borders

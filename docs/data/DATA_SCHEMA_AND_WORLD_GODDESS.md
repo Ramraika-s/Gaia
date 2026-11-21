@@ -11,11 +11,11 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 Gender = Literal["BOY", "GIRL"]
-RaceId = Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN"]
+RaceId = Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"]
 BeasthumanSubLineage = Literal["CAT_KIN", "DWARF", "WOLF_KIN", "BARBARIAN", "BEAR_KIN"]
 DragonForm = Literal["HUMANOID_DRAGON", "TRUE_DRAGON"]
-DeitySlot = Literal["world_goddess", "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman"]
-RacialGodMotherSlot = Literal["gm_human", "gm_elf", "gm_dragon", "gm_beasthuman"]
+DeitySlot = Literal["world_goddess", "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"]
+RacialGodMotherSlot = Literal["gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"]
 
 Stage = Literal["INFANT", "CHILD", "ADULT", "ELDER"]
 Season = Literal["SPRING", "SUMMER", "AUTUMN", "WINTER"]
@@ -162,7 +162,7 @@ class SisterCouncilMessage(BaseModel):
     day: int
     tick: int
     sender_slot: DeitySlot
-    recipient_slots: list[DeitySlot]    # 1 sister, all 4 sisters, or ["world_goddess"]
+    recipient_slots: list[DeitySlot]    # 1 sister, all 5 sisters, or ["world_goddess"]
     topic: Literal[
         "BORDER_FRICTION", "DRAGON_PROVOCATION", "WAR_INTERVENTION",
         "DIVINE_TRUCE", "COVENANT_BREACH", "FREE_CITY_ACCORD", "GOD_ESCALATION"
@@ -335,8 +335,40 @@ class LibraryProposalRecord(BaseModel):
     author_proficiency: float = Field(ge=0.0, le=1.0)
     votes_approve: list[str] = Field(default_factory=list)  # Appointed Elder agent_ids
     votes_reject: list[str] = Field(default_factory=list)
-    status: Literal["OPEN", "APPROVED", "REJECTED"] = "OPEN"
+    godmother_approvals: list[DeitySlot] = Field(default_factory=list)
+    godmother_objections: list[DeitySlot] = Field(default_factory=list)
+    first_approval_tick: Optional[int] = None
+    appeal_target: Optional[Literal["WORLD_GODDESS", "GOD"]] = None
+    appeal_ruling: Optional[str] = None
+    status: Literal[
+        "OPEN", "PENDING_GODMOTHERS", "OBJECTION_WINDOW",
+        "BLOCKED_BY_DAUGHTERS", "EXPIRED", "APPROVED", "REJECTED"
+    ] = "OPEN"
     created_tick: int
+
+class DivineCodexEntry(BaseModel):
+    entry_id: str
+    title: str
+    text: str
+    category: Literal["DECREE", "COVENANT_LAW", "WAR_DIRECTIVE", "PARAMETER_OVERRIDE"]
+    parameter_key: Optional[str] = None
+    parameter_value_json: Optional[str] = None
+    author_slot: str                        # "GOD", "world_goddess", or "gm_*"
+    supporting_daughter_slots: list[DeitySlot] = Field(default_factory=list)
+    approved_by_god: bool = False
+    created_tick: int
+
+class DivineCodexProposalRecord(BaseModel):
+    proposal_id: str
+    title: str
+    text: str
+    parameter_key: str
+    parameter_value_json: str
+    proposer_slot: DeitySlot                # "world_goddess" (alone) or "gm_*"
+    co_sponsors: list[DeitySlot] = Field(default_factory=list)  # all 5 daughters required if initiated by daughters
+    status: Literal["PENDING_GOD", "APPROVED", "REJECTED"] = "PENDING_GOD"
+    submitted_tick: int
+    resolved_tick: Optional[int] = None
 
 class TraditionRecord(BaseModel):
     tradition_id: str
@@ -673,8 +705,39 @@ CREATE TABLE IF NOT EXISTS library_proposals (
     author_proficiency REAL NOT NULL,
     votes_approve_json TEXT NOT NULL,
     votes_reject_json TEXT NOT NULL,
+    godmother_approvals_json TEXT NOT NULL,
+    godmother_objections_json TEXT NOT NULL,
+    first_approval_tick INTEGER,
+    appeal_target TEXT,
+    appeal_ruling TEXT,
     status TEXT NOT NULL,
     created_tick INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS divine_codex (
+    entry_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    category TEXT NOT NULL,
+    parameter_key TEXT,
+    parameter_value_json TEXT,
+    author_slot TEXT NOT NULL,
+    supporting_daughter_slots_json TEXT NOT NULL,
+    approved_by_god INTEGER NOT NULL DEFAULT 0,
+    created_tick INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS divine_codex_proposals (
+    proposal_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    parameter_key TEXT NOT NULL,
+    parameter_value_json TEXT NOT NULL,
+    proposer_slot TEXT NOT NULL,
+    co_sponsors_json TEXT NOT NULL,
+    status TEXT NOT NULL,
+    submitted_tick INTEGER NOT NULL,
+    resolved_tick INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS traditions (
@@ -769,8 +832,10 @@ During the game day, `WorldGoddessCritic.evaluate(proposal)` validates every mut
 | `PATRON_CHOICE` | Agent is alive, mixed-race (`secondary_heritage_race is not None`), `patron_godmother_slot is None`, and has reached biological age 10 (`>= 3.33 * L` game days). Target must be one of the two parental God-Mothers; on timeout, auto-allocates higher affinity, or escalates tie to World Goddess. | `"Rejected: agent is not an uncommitted mixed-race child"`, `"Rejected: target God-Mother is not a parental patron"`, `"Rejected: patron already permanently locked"` |
 | `SELF_RENAME` | Agent alive, `stage in {"ADULT", "ELDER"}`, non-empty valid `display_name`. | `"Rejected: only adults may self-rename"` |
 | `CREDIT_TRANSFER` | **Strict Double-Entry:** `amount > 0`, sender exists and `sender.credits >= amount`, receiver exists. Debits sender and credits receiver identically (zero currency minted). | `"Rejected: insufficient funds"`, `"Rejected: non-positive transfer amount"` |
-| `LIBRARY_ENTRY` | Direct creation/edit by any mortal is **blocked** unless backed by an `APPROVED` `LibraryProposalRecord` with `len(votes_approve) > total_appointed_elders / 2`. Author must have `skills[topic] >= 0.70` (or be `POPE` for scripture). Only `God` (`bypass_god_check=True`, e.g. Godot `GOD_LIBRARY_EDIT`) bypasses voting. | `"Unauthorized: requires >50% Council of Elders consensus"`, `"Rejected: insufficient mastery (<0.70)"` |
-| `LIBRARY_VOTE` | Voter is a living Elder registered in `library_council_elders`; proposal is `OPEN`; voter has not already voted. Auto-commits when `approvals > total_elders / 2`. | `"Unauthorized: voter is not an Appointed Library Elder"`, `"Rejected: duplicate vote"` |
+| `LIBRARY_ENTRY` | **World Library Write Rules:**<br>1. **God:** Direct write anytime (`bypass_god_check=True`).<br>2. **World Goddess:** Direct edit with `>= 1` Daughter approval.<br>3. **Daughters Alone:** Direct edit with `> 50%` (`>= 3/5`) Daughters voting approve.<br>4. **Mortals:** Blocked unless proposal passed Mortal Elders (`> 50%`), entered 1-day objection window with `>= 1` God-Mother approval, and completed without `>= 3/5` objections. | `"Unauthorized: requires >50% Council of Elders and God-Mother review"`, `"Rejected: blocked by Daughters (>50% objections)"`, `"Rejected: proposal expired or unapproved"` |
+| `LIBRARY_VOTE` | Elder voter registered in `library_council_elders` (max 2/nation); proposal is `OPEN`; no duplicate vote. If Elder approvals pass `> 50%`, moves to `PENDING_GODMOTHERS`. If God-Mother vote, records approval/objection; first approval starts 1-day objection window. `>= 3/5` objections flips to `BLOCKED_BY_DAUGHTERS`. | `"Unauthorized: voter is not an Appointed Library Elder or God-Mother"`, `"Rejected: duplicate vote"` |
+| `DIVINE_CODEX_DECREE` | **Divine Codex Write Rules (Option B):**<br>1. **God (Admin):** Sole direct write authority for both text decrees and live engine-parameter overrides (`bypass_god_check=True`).<br>2. **World Goddess + `>= 3/5` Daughters:** May commit **non-mechanical text decrees** directly.<br>3. **Parameter Overrides:** Blocked directly for Goddess and Daughters (must use proposal).<br>4. **Daughters alone (< 5/5 or without Goddess) & Mortals:** Strictly blocked. | `"Unauthorized: parameter overrides require direct God execution"`, `"Unauthorized: non-mechanical decrees require World Goddess + >=3/5 Daughters"`, `"Rejected: mortals cannot edit Divine Codex"` |
+| `DIVINE_CODEX_PROPOSAL` | Submits an engine-parameter override proposal to God (Admin). Proposer must be **World Goddess (alone)** OR **all 5 Daughters unanimously (`5/5` co-sponsors)**. Routed to God Ledger / Divine HUD. Only God can approve and apply parameter overrides to the engine. | `"Unauthorized: proposals require World Goddess alone or unanimous 5/5 Daughters"`, `"Rejected: invalid parameter key"` |
 | `SETTLEMENT_APPEAL` | On `TIER_UPGRADE`: meets `requested_tier` pop, contiguous `16×16m` parcel count, and treasury thresholds; `claimed_parcel_ids` do **not** overlap existing same-tier borders. On `NEUTRAL_FREE_CITY`: `tier == "CITY"` with `>= 2` races each representing `>= 15%` of living pop. | `"Rejected: pop/parcel/treasury threshold unmet"`, `"Rejected: border overlaps existing settlement"`, `"Rejected: Neutral Free City requires >=2 races at >=15% share"` |
 | `SETTLEMENT_UPDATE` | Actor is `leader_id` (or founder on creation). On `APPOINT_LIBRARY_ELDER`: polity `tier == "NATION"`, target is living `ELDER`, and nation currently has `< 2` appointed Elders. `0.0 <= tax_rate <= 0.30`, `0.0 <= tariff_rate <= 0.50`. | `"Rejected: nation already has maximum 2 Library Elders"`, `"Unauthorized: actor is not settlement leader"` |
 | `GOD_MOTHER_INTERVENTION` | Actor is a `RacialGodMotherSlot`; `divine_energy >= cost`; `tick >= intervention_cooldown_until_tick`; target is of her patron race (or uncommitted mixed-race ward). **Non-Aggression Covenant:** blocks offensive strikes against rival civilians (increments `covenant_rebukes`). Respects active `DIVINE_TRUCE` during wars. On `BLESS_ORACLE`, living Oracles `< 3`. | `"Rejected: violates Non-Aggression Covenant"`, `"Rejected: insufficient Divine Energy or on cooldown"`, `"Rejected: active Divine Truce blocks wartime boost"`, `"Rejected: maximum 3 active Oracles reached"` |
