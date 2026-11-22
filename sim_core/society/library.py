@@ -473,3 +473,21 @@ class TwoBookGovernanceEngine:
         )
         self.codex_entries[entry_id] = entry
         return True, "PROPOSAL_APPROVED_AND_APPLIED_BY_GOD", entry
+
+    def reject_codex_proposal_by_god(
+        self,
+        proposal_id: str,
+        current_tick: int,
+    ) -> tuple[bool, str, DivineCodexProposalRecord | None]:
+        """God (Admin) rejects a pending parameter override proposal."""
+        if proposal_id not in self.codex_proposals:
+            return False, "PROPOSAL_NOT_FOUND", None
+
+        prop = self.codex_proposals[proposal_id]
+        if prop.status != "PENDING_GOD":
+            return False, f"PROPOSAL_NOT_PENDING: status is {prop.status}", None
+
+        prop.status = "REJECTED"
+        prop.resolved_tick = current_tick
+        return True, "PROPOSAL_REJECTED_BY_GOD", prop
+

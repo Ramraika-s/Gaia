@@ -1,0 +1,114 @@
+[gd_scene load_steps=18 format=3]
+
+[ext_resource type="Script" path="res://scripts/main_world.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/sky_weather_controller.gd" id="2_sky"]
+[ext_resource type="PackedScene" path="res://scenes/weather_particles.tscn" id="3_weather"]
+[ext_resource type="Script" path="res://scripts/god_camera_controller.gd" id="4_camera"]
+[ext_resource type="Script" path="res://scripts/parcel_border_overlay.gd" id="5_parcel"]
+[ext_resource type="Shader" path="res://shaders/stylized_toon_season.gdshader" id="6_shader"]
+[ext_resource type="Script" path="res://scripts/reality_bubble_manager.gd" id="7_bubble"]
+[ext_resource type="Script" path="res://scripts/landmarks_manager.gd" id="8_landmarks"]
+[ext_resource type="Script" path="res://scripts/orbital_multimesh_renderer.gd" id="9_orbital"]
+[ext_resource type="Script" path="res://scripts/divine_npcs_manager.gd" id="10_deities"]
+[ext_resource type="PackedScene" path="res://scenes/ui/divine_hud.tscn" id="11_hud"]
+[ext_resource type="PackedScene" path="res://scenes/ui/two_book_modal.tscn" id="12_twobook"]
+[ext_resource type="PackedScene" path="res://scenes/ui/god_console_overlay.tscn" id="13_console"]
+[ext_resource type="PackedScene" path="res://scenes/ui/entity_inspector.tscn" id="14_inspector"]
+[ext_resource type="Script" path="res://scripts/nature_scatter_manager.gd" id="15_scatter"]
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 1
+background_color = Color(0.48, 0.65, 0.88, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.14, 0.18, 0.28, 1)
+ambient_light_energy = 0.45
+tonemap_mode = 2
+glow_enabled = true
+glow_intensity = 0.35
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_terrain"]
+render_priority = 0
+shader = ExtResource("6_shader")
+shader_parameter/base_color = Color(0.28, 0.44, 0.24, 1)
+shader_parameter/is_foliage = false
+shader_parameter/cel_shadow_threshold = 0.45
+shader_parameter/cel_shadow_softness = 0.05
+shader_parameter/shadow_tint = Color(0.2, 0.28, 0.36, 1)
+shader_parameter/rim_threshold = 0.65
+shader_parameter/rim_softness = 0.1
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+material = SubResource("ShaderMaterial_terrain")
+size = Vector2(10000, 10000)
+subdivide_width = 32
+subdivide_depth = 32
+
+[node name="MainWorld" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_world")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 100, 0)
+shadow_enabled = true
+directional_shadow_max_distance = 350.0
+directional_shadow_split_1 = 0.15
+directional_shadow_split_2 = 0.3
+directional_shadow_split_3 = 0.6
+light_color = Color(1, 0.98, 0.92, 1)
+light_energy = 1.15
+
+[node name="SkyWeatherController" type="Node3D" parent="."]
+script = ExtResource("2_sky")
+sky_node_path = NodePath("../WorldEnvironment")
+weather_particles_path = NodePath("WeatherParticles")
+
+[node name="WeatherParticles" parent="SkyWeatherController" instance=ExtResource("3_weather")]
+
+[node name="TerrainRoot" type="Node3D" parent="."]
+
+[node name="GroundPlane" type="MeshInstance3D" parent="TerrainRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 18, 0)
+mesh = SubResource("PlaneMesh_ground")
+
+[node name="GodCameraController" type="Node3D" parent="."]
+script = ExtResource("4_camera")
+
+[node name="CameraPivot" type="Node3D" parent="GodCameraController"]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 18.5, 0)
+
+[node name="Camera3D" type="Camera3D" parent="GodCameraController/CameraPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 60)
+current = true
+fov = 65.0
+far = 5000.0
+
+[node name="AvatarRoot" type="Node3D" parent="GodCameraController"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 18.5, 0)
+
+[node name="ParcelBorderOverlay" type="Node3D" parent="."]
+script = ExtResource("5_parcel")
+
+[node name="RealityBubbleContainer" type="Node3D" parent="."]
+script = ExtResource("7_bubble")
+
+[node name="LandmarksContainer" type="Node3D" parent="."]
+script = ExtResource("8_landmarks")
+
+[node name="OrbitalMultiMeshRenderer" type="Node3D" parent="."]
+script = ExtResource("9_orbital")
+
+[node name="DivineNpcsManager" type="Node3D" parent="."]
+script = ExtResource("10_deities")
+
+[node name="DivineHud" parent="." instance=ExtResource("11_hud")]
+
+[node name="TwoBookModal" parent="." instance=ExtResource("12_twobook")]
+
+[node name="GodConsoleOverlay" parent="." instance=ExtResource("13_console")]
+
+[node name="EntityInspector" parent="." instance=ExtResource("14_inspector")]
+ 
+[node name="NatureScatterManager" type="Node3D" parent="."]
+script = ExtResource("15_scatter")

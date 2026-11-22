@@ -1,0 +1,253 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/two_book_modal.gd" id="1_modal"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_modal"]
+bg_color = Color(0.08, 0.09, 0.14, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.5, 0.75, 0.85)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.6)
+shadow_size = 18
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 12.0
+
+[node name="TwoBookModal" type="CanvasLayer"]
+layer = 20
+script = ExtResource("1_modal")
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ModalPanel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(960, 640)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_modal")
+
+[node name="VBox" type="VBoxContainer" parent="Center/ModalPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Header" type="HBoxContainer" parent="Center/ModalPanel/VBox"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Center/ModalPanel/VBox/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9, 0.6, 1)
+theme_override_font_sizes/font_size = 18
+text = "✦ THE TWO BOOKS OF GAIA GOVERNANCE ✦"
+
+[node name="Spacer" type="Control" parent="Center/ModalPanel/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BtnClose" type="Button" parent="Center/ModalPanel/VBox/Header"]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+text = "✕"
+
+[node name="HSep" type="HSeparator" parent="Center/ModalPanel/VBox"]
+layout_mode = 2
+
+[node name="TabContainer" type="TabContainer" parent="Center/ModalPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+current_tab = 0
+
+[node name="WorldLibrary" type="Control" parent="Center/ModalPanel/VBox/TabContainer"]
+layout_mode = 2
+metadata/_tab_title = "World Library (Mortal & Divine Scholarship)"
+
+[node name="HBox" type="HBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+
+[node name="ListVBox" type="VBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="ListHeader" type="Label" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/ListVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.9, 1, 1)
+text = "Canonical Volumes & Proposals:"
+
+[node name="ItemList" type="ItemList" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/ListVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VSep" type="VSeparator" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox"]
+layout_mode = 2
+
+[node name="DetailVBox" type="VBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="TitleLabel" type="Label" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.92, 0.65, 1)
+theme_override_font_sizes/font_size = 16
+text = "Select a volume..."
+
+[node name="AuthorLabel" type="Label" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.75, 0.85, 1)
+theme_override_font_sizes/font_size = 12
+text = "Author: —"
+
+[node name="ContentText" type="TextEdit" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox"]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_vertical = 3
+editable = false
+wrap_mode = 1
+
+[node name="HSep2" type="HSeparator" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox"]
+layout_mode = 2
+
+[node name="FormHeader" type="Label" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+text = "Direct God Volume Inscription (bypass_god_check=true):"
+
+[node name="EditForm" type="VBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TopicInput" type="LineEdit" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox/EditForm"]
+layout_mode = 2
+placeholder_text = "Topic (e.g., CELESTIAL_PHYSICS, HERBALISM)"
+
+[node name="TitleInput" type="LineEdit" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox/EditForm"]
+layout_mode = 2
+placeholder_text = "Volume Title"
+
+[node name="BodyInput" type="TextEdit" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox/EditForm"]
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+placeholder_text = "Canonical Knowledge Text..."
+wrap_mode = 1
+
+[node name="BtnCommit" type="Button" parent="Center/ModalPanel/VBox/TabContainer/WorldLibrary/HBox/DetailVBox/EditForm"]
+layout_mode = 2
+text = "✦ Inscribe Canonical Volume into World Library ✦"
+
+[node name="DivineCodex" type="Control" parent="Center/ModalPanel/VBox/TabContainer"]
+visible = false
+layout_mode = 2
+metadata/_tab_title = "Divine Rules Book (divine_codex)"
+
+[node name="HBox" type="HBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+
+[node name="ListVBox" type="VBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="ListHeader" type="Label" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/ListVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.9, 1, 1)
+text = "Divine Decrees & Overrides:"
+
+[node name="ItemList" type="ItemList" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/ListVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VSep" type="VSeparator" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox"]
+layout_mode = 2
+
+[node name="DetailVBox" type="VBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="TitleLabel" type="Label" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.92, 0.65, 1)
+theme_override_font_sizes/font_size = 16
+text = "Select a decree or proposal..."
+
+[node name="AuthorLabel" type="Label" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.75, 0.85, 1)
+theme_override_font_sizes/font_size = 12
+text = "Category: —"
+
+[node name="ContentText" type="TextEdit" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox"]
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+size_flags_vertical = 3
+editable = false
+wrap_mode = 1
+
+[node name="ApprovalHBox" type="HBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="BtnApprove" type="Button" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox/ApprovalHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "✔ Approve & Apply Parameter Override"
+
+[node name="BtnReject" type="Button" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox/ApprovalHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "✖ Reject Proposal"
+
+[node name="HSep2" type="HSeparator" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox"]
+layout_mode = 2
+
+[node name="FormHeader" type="Label" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+text = "God Direct Decree & Engine Override:"
+
+[node name="DecreeForm" type="VBoxContainer" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="DecreeIdInput" type="LineEdit" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox/DecreeForm"]
+layout_mode = 2
+placeholder_text = "Decree ID (e.g., DECREE_DIVINE_TRUCE_EXTENDED)"
+
+[node name="ParamKeyInput" type="LineEdit" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox/DecreeForm"]
+layout_mode = 2
+placeholder_text = "Optional Parameter Key (e.g., DIVINE_TRUCE_DURATION, NON_AGGRESSION_COVENANT)"
+
+[node name="ParamValInput" type="LineEdit" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox/DecreeForm"]
+layout_mode = 2
+placeholder_text = "Optional Parameter Value (e.g., 180.0, true)"
+
+[node name="DecreeBodyInput" type="TextEdit" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox/DecreeForm"]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+placeholder_text = "Decree Text / Directive..."
+wrap_mode = 1
+
+[node name="BtnPromulgate" type="Button" parent="Center/ModalPanel/VBox/TabContainer/DivineCodex/HBox/DetailVBox/DecreeForm"]
+layout_mode = 2
+text = "⚡ Promulgate Divine Decree & Apply Parameter Override ⚡"

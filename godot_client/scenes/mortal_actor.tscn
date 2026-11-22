@@ -1,0 +1,125 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/mortal_actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://scripts/dragon_morph_controller.gd" id="2_morph"]
+[ext_resource type="PackedScene" path="res://assets/mortals/base_dragon_true.glb" id="3_dragon"]
+[ext_resource type="Texture2D" path="res://assets/vfx/particles/circle_05.png" id="4_particle_tex"]
+[ext_resource type="AudioStream" path="res://assets/audio/rpg/creak1.ogg" id="5_audio"]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_crying"]
+direction = Vector3(0, -1, 0.5)
+spread = 35.0
+initial_velocity_min = 0.8
+initial_velocity_max = 1.6
+gravity = Vector3(0, -8.0, 0)
+scale_min = 0.15
+scale_max = 0.3
+color = Color(0.35, 0.75, 1, 0.85)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_crying"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_texture = ExtResource("4_particle_tex")
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_tear"]
+material = SubResource("StandardMaterial3D_crying")
+size = Vector2(0.2, 0.2)
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_oracle"]
+emission_shape = 1
+emission_sphere_radius = 0.8
+direction = Vector3(0, 1, 0)
+spread = 15.0
+initial_velocity_min = 0.5
+initial_velocity_max = 1.2
+gravity = Vector3(0, 0.5, 0)
+scale_min = 0.15
+scale_max = 0.35
+color = Color(1, 0.88, 0.3, 0.9)
+
+[sub_resource type="TorusMesh" id="TorusMesh_fear"]
+inner_radius = 39.4
+outer_radius = 40.0
+rings = 64
+ring_segments = 4
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fear"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.9, 0.15, 0.1, 0.45)
+
+[node name="MortalActor" type="Node3D"]
+script = ExtResource("1_actor")
+
+[node name="VisualRoot" type="Node3D" parent="."]
+
+[node name="HumanoidMeshNode" type="Node3D" parent="VisualRoot"]
+
+[node name="TrueDragonMeshNode" type="Node3D" parent="VisualRoot"]
+visible = false
+
+[node name="TrueDragonInstance" parent="VisualRoot/TrueDragonMeshNode" instance=ExtResource("3_dragon")]
+transform = Transform3D(3.8, 0, 0, 0, 3.8, 0, 0, 0, 3.8, 0, 0, 0)
+
+[node name="CryingParticles" type="GPUParticles3D" parent="VisualRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.45, 0.25)
+visible = false
+emitting = false
+amount = 12
+lifetime = 0.8
+process_material = SubResource("ParticleProcessMaterial_crying")
+draw_pass_1 = SubResource("QuadMesh_tear")
+
+[node name="CryingAudio" type="AudioStreamPlayer3D" parent="VisualRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+stream = ExtResource("5_audio")
+volume_db = -12.0
+pitch_scale = 1.6
+max_distance = 35.0
+
+[node name="OracleAuraParticles" type="GPUParticles3D" parent="VisualRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+visible = false
+emitting = false
+amount = 16
+lifetime = 1.4
+process_material = SubResource("ParticleProcessMaterial_oracle")
+draw_pass_1 = SubResource("QuadMesh_tear")
+
+[node name="FearAuraRing" type="MeshInstance3D" parent="VisualRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+visible = false
+mesh = SubResource("TorusMesh_fear")
+surface_material_override/0 = SubResource("StandardMaterial3D_fear")
+
+[node name="MetamorphosisBurstParticles" type="GPUParticles3D" parent="VisualRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
+emitting = false
+amount = 32
+lifetime = 0.7
+one_shot = true
+explosiveness = 0.95
+process_material = SubResource("ParticleProcessMaterial_crying")
+draw_pass_1 = SubResource("QuadMesh_tear")
+
+[node name="DragonMorphController" type="Node3D" parent="." node_paths=PackedStringArray("humanoid_node", "true_dragon_node", "burst_particles", "fear_aura_ring")]
+script = ExtResource("2_morph")
+humanoid_node = NodePath("../VisualRoot/HumanoidMeshNode")
+true_dragon_node = NodePath("../VisualRoot/TrueDragonMeshNode")
+burst_particles = NodePath("../VisualRoot/MetamorphosisBurstParticles")
+fear_aura_ring = NodePath("../VisualRoot/FearAuraRing")
+
+[node name="NameplateLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+billboard = 1
+outline_render_priority = 1
+outline_size = 6
+font_size = 20
+outline_modulate = Color(0.05, 0.05, 0.08, 0.8)
+text = "Citizen Founder
+[HUMAN • ADULT]"

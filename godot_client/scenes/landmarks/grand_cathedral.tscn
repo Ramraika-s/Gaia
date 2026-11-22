@@ -1,0 +1,110 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/buildings/village/floor_brick.gltf" id="1_floor"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall_arched.gltf" id="2_arched_wall"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/pillar_decorated.gltf" id="3_pillar"]
+[ext_resource type="PackedScene" path="res://assets/buildings/props/table_large.gltf" id="4_altar_table"]
+[ext_resource type="PackedScene" path="res://assets/buildings/props/chalice.gltf" id="5_chalice"]
+[ext_resource type="PackedScene" path="res://assets/buildings/props/candle_stick_stand.gltf" id="6_candle"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/banner_white.gltf" id="7_banner"]
+[ext_resource type="Texture2D" path="res://assets/vfx/particles/circle_05.png" id="8_particle_tex"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_beacon"]
+top_radius = 2.0
+bottom_radius = 2.4
+height = 120.0
+radial_segments = 16
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_beacon"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.85, 0.95, 1, 0.65)
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_beacon"]
+emission_shape = 6
+emission_ring_axis = Vector3(0, 1, 0)
+emission_ring_height = 1.0
+emission_ring_radius = 4.0
+emission_ring_inner_radius = 2.0
+direction = Vector3(0, 1, 0)
+spread = 5.0
+initial_velocity_min = 12.0
+initial_velocity_max = 24.0
+gravity = Vector3(0, 2, 0)
+scale_min = 0.3
+scale_max = 0.8
+color = Color(0.9, 0.95, 1, 0.8)
+
+[sub_resource type="QuadMesh" id="QuadMesh_sparkle"]
+size = Vector2(0.5, 0.5)
+
+[node name="GrandCathedral" type="Node3D"]
+
+[node name="Floor" parent="." instance=ExtResource("1_floor")]
+transform = Transform3D(10, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0)
+
+[node name="Pillar_1" parent="." instance=ExtResource("3_pillar")]
+transform = Transform3D(1.4, 0, 0, 0, 2.5, 0, 0, 0, 1.4, -6, 0, -6)
+
+[node name="Pillar_2" parent="." instance=ExtResource("3_pillar")]
+transform = Transform3D(1.4, 0, 0, 0, 2.5, 0, 0, 0, 1.4, 6, 0, -6)
+
+[node name="Pillar_3" parent="." instance=ExtResource("3_pillar")]
+transform = Transform3D(1.4, 0, 0, 0, 2.5, 0, 0, 0, 1.4, -6, 0, 6)
+
+[node name="Pillar_4" parent="." instance=ExtResource("3_pillar")]
+transform = Transform3D(1.4, 0, 0, 0, 2.5, 0, 0, 0, 1.4, 6, 0, 6)
+
+[node name="Arch_North" parent="." instance=ExtResource("2_arched_wall")]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, -8.5)
+
+[node name="AltarTable" parent="." instance=ExtResource("4_altar_table")]
+transform = Transform3D(2, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0, 0, -4)
+
+[node name="Chalice" parent="." instance=ExtResource("5_chalice")]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0, 1.2, -4)
+
+[node name="Candle_L" parent="." instance=ExtResource("6_candle")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, -2.5, 0, -4)
+
+[node name="Candle_R" parent="." instance=ExtResource("6_candle")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 2.5, 0, -4)
+
+[node name="Banner" parent="." instance=ExtResource("7_banner")]
+transform = Transform3D(1.8, 0, 0, 0, 1.8, 0, 0, 0, 1.8, 0, 4.2, -8.2)
+
+[node name="CathedralSignLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.5, 8.5)
+billboard = 1
+outline_render_priority = 1
+outline_size = 6
+font_size = 22
+modulate = Color(0.9, 0.95, 1, 1)
+text = "THE GRAND CATHEDRAL OF THE GOD-MOTHERS
+Congregational Altar of Divine Communion"
+
+[node name="AltarPrayerBeacon" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -4)
+visible = false
+
+[node name="BeaconPillarMesh" type="MeshInstance3D" parent="AltarPrayerBeacon"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 60, 0)
+mesh = SubResource("CylinderMesh_beacon")
+surface_material_override/0 = SubResource("StandardMaterial3D_beacon")
+
+[node name="BeaconParticles" type="GPUParticles3D" parent="AltarPrayerBeacon"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+amount = 48
+lifetime = 3.0
+process_material = SubResource("ParticleProcessMaterial_beacon")
+draw_pass_1 = SubResource("QuadMesh_sparkle")
+
+[node name="BeaconLabel" type="Label3D" parent="AltarPrayerBeacon"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 15, 0)
+billboard = 1
+outline_render_priority = 1
+outline_size = 6
+font_size = 24
+modulate = Color(1, 0.95, 0.4, 1)
+text = "✦ CONGREGATIONAL PRAYER BEACON ACTIVE ✦"

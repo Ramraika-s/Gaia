@@ -102,6 +102,28 @@ class GodotWebSocketBridge(WorldAdapter):
         self.active_mask: np.ndarray = np.zeros(self.capacity, dtype=bool)
         self.slot_to_agent_id: dict[int, str] = {}
         self.agent_id_to_slot: dict[str, int] = {}
+        self.cli: Any = None
+
+    def get_book_state_payload(self) -> dict[str, Any]:
+        """Packs world_library and divine_codex state + pending proposals."""
+        gov = self.engine.governance_engine if self.engine else None
+        if not gov:
+            return {
+                "type": "BOOK_STATE_SYNC",
+                "library_entries": [],
+                "library_proposals": [],
+                "codex_entries": [],
+                "codex_proposals": [],
+                "live_overrides": {},
+            }
+        return {
+            "type": "BOOK_STATE_SYNC",
+            "library_entries": [e.model_dump() for e in gov.library_entries.values()],
+            "library_proposals": [p.model_dump() for p in gov.library_proposals.values()],
+            "codex_entries": [e.model_dump() for e in gov.codex_entries.values()],
+            "codex_proposals": [p.model_dump() for p in gov.codex_proposals.values()],
+            "live_overrides": dict(gov.live_engine_overrides),
+        }
 
     # =========================================================================
     # Buffer Management & Capacity Slabs
@@ -323,7 +345,21 @@ class GodotWebSocketBridge(WorldAdapter):
         msg_type = data.get("type", "")
 
         try:
-            if msg_type == "GOD_STATE":
+            if msg_type == "CLIENT_HANDSHAKE":
+                await client.send(
+                    json.dumps(
+                        {
+                            "type": "HANDSHAKE_ACK",
+                            "status": "CONNECTED",
+                            "server": "GAIA_CIVILIZATION_ENGINE",
+                            "version": "3.0.0",
+                        }
+                    )
+                )
+                await client.send(json.dumps(self.get_book_state_payload()))
+            elif msg_type == "REQUEST_BOOK_STATE_SYNC":
+                await client.send(json.dumps(self.get_book_state_payload()))
+            elif msg_type == "GOD_STATE":
                 await self._handle_god_state(client, data)
             elif msg_type == "GOD_LIBRARY_EDIT":
                 await self._handle_god_library_edit(client, data)
@@ -331,6 +367,8 @@ class GodotWebSocketBridge(WorldAdapter):
                 await self._handle_god_codex_edit(client, data)
             elif msg_type == "GOD_CODEX_APPROVE":
                 await self._handle_god_codex_approve(client, data)
+            elif msg_type == "GOD_CODEX_REJECT":
+                await self._handle_god_codex_reject(client, data)
             elif msg_type == "GOD_COMMAND":
                 await self._handle_god_command(client, data)
             else:
@@ -432,6 +470,8 @@ class GodotWebSocketBridge(WorldAdapter):
                 }
             )
         )
+        if verdict.status == "SUCCESS":
+            self.broadcast_book_state(exclude=client)
 
     async def _handle_god_codex_edit(self, client: Any, data: dict[str, Any]) -> None:
         """Direct God decree or live parameter override in RAM."""
@@ -487,6 +527,8 @@ class GodotWebSocketBridge(WorldAdapter):
                 }
             )
         )
+        if verdict.status == "SUCCESS":
+            self.broadcast_book_state(exclude=client)
 
     async def _handle_god_codex_approve(self, client: Any, data: dict[str, Any]) -> None:
         """Approves a pending Divine Codex proposal submitted by Goddess/Daughters."""
@@ -514,12 +556,67 @@ class GodotWebSocketBridge(WorldAdapter):
                     "type": "GOD_CODEX_APPROVE_RESPONSE",
                     "status": "SUCCESS" if success else "FAILURE",
                     "proposal_id": proposal_id,
+                    "reason": reason,
                 }
             )
         )
+        if success:
+            self.broadcast_book_state(exclude=client)
+
+    async def _handle_god_codex_reject(self, client: Any, data: dict[str, Any]) -> None:
+        """Rejects a pending Divine Codex proposal submitted by Goddess/Daughters."""
+        proposal_id = data.get("proposal_id", "")
+
+        if not self.engine:
+            await client.send(
+                json.dumps(
+                    {
+                        "type": "GOD_CODEX_REJECT_RESPONSE",
+                        "status": "FAILURE",
+                        "reason": "Engine offline",
+                    }
+                )
+            )
+            return
+
+        success, reason, _ = self.engine.governance_engine.reject_codex_proposal_by_god(
+            proposal_id=proposal_id, current_tick=self.engine.current_tick
+        )
+
+        await client.send(
+            json.dumps(
+                {
+                    "type": "GOD_CODEX_REJECT_RESPONSE",
+                    "status": "SUCCESS" if success else "FAILURE",
+                    "proposal_id": proposal_id,
+                    "reason": reason,
+                }
+            )
+        )
+        if success:
+            self.broadcast_book_state(exclude=client)
 
     async def _handle_god_command(self, client: Any, data: dict[str, Any]) -> None:
         """Executes miscellaneous divine interventions and runtime controls."""
+        raw_cmd = data.get("raw_command")
+        if raw_cmd:
+            if not self.cli and self.engine:
+                from sim_core.god_console.cli import GodConsoleCLI
+
+                self.cli = GodConsoleCLI(engine=self.engine)
+            output_text = self.cli.execute_command(raw_cmd) if self.cli else "CLI engine offline"
+            await client.send(
+                json.dumps(
+                    {
+                        "type": "GOD_COMMAND_RESULT",
+                        "command": raw_cmd,
+                        "output": output_text,
+                        "status": "SUCCESS",
+                    }
+                )
+            )
+            return
+
         cmd = data.get("command", "")
         details: dict[str, Any] = {}
 
@@ -641,6 +738,17 @@ class GodotWebSocketBridge(WorldAdapter):
     # =========================================================================
     # Server Lifecycle & Connection Handling
     # =========================================================================
+
+    def broadcast_book_state(self, exclude: Any = None) -> None:
+        """Broadcasts BOOK_STATE_SYNC to connected clients."""
+        payload = self.get_book_state_payload()
+        msg = json.dumps(payload)
+        for c in list(self.clients):
+            if c != exclude:
+                try:
+                    asyncio.create_task(c.send(msg))
+                except Exception:
+                    pass
 
     async def _client_handler(self, websocket: Any) -> None:
         """Handles single WebSocket connection lifecycle."""

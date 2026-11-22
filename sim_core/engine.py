@@ -290,11 +290,17 @@ class SimulationEngine:
                     bubble_rigs.append({
                         "agent_id": agent.agent_id,
                         "slot_idx": agent.slot_idx,
+                        "race": agent.race,
+                        "gender": agent.gender,
+                        "stage": agent.stage,
+                        "name": agent.display_name,
+                        "dynasty": agent.dynasty_surname,
                         "x": agent.pos.x,
                         "y": agent.pos.y,
                         "z": agent.pos.z,
                         "crying": agent.crying,
-                        "stage": agent.stage,
+                        "is_oracle": agent.is_oracle,
+                        "dragon_form": agent.dragon_form,
                     })
             elif agent.crying or agent.distress >= 0.45 or agent.health < agent.max_health:
                 # Tier 1: Distant awake / distress -> Steps every 2 ticks (1 Hz)

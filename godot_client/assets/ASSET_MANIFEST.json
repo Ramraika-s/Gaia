@@ -1,0 +1,54 @@
+{
+  "version": "3.0.0",
+  "description": "Master asset mapping for Gaia Civilization Engine Godot 4.7.2 client",
+  "deities": {
+    "god_avatar": "res://assets/deities/god_avatar.vrm",
+    "world_goddess": "res://assets/deities/world_goddess.vrm",
+    "world_goddess_portrait": "res://assets/deities/world_goddess_portrait.png",
+    "gm_human": "res://assets/deities/gm_human.vrm",
+    "gm_elf": "res://assets/deities/gm_elf.vrm",
+    "gm_dragon": "res://assets/deities/gm_dragon.vrm",
+    "gm_beasthuman": "res://assets/deities/gm_beasthuman.vrm",
+    "gm_demon": "res://assets/deities/gm_demon.vrm"
+  },
+  "mortal_races": {
+    "HUMAN": {
+      "base_female": "res://assets/mortals/races/base_human_female.glb",
+      "base_male": "res://assets/mortals/races/base_human_male.gltf"
+    },
+    "ELF": {
+      "base_male": "res://assets/mortals/races/base_elf_male.glb",
+      "base_female": "res://assets/mortals/races/base_elf_female.glb"
+    },
+    "DRAGON": {
+      "humanoid_form": "res://assets/mortals/races/base_dragon_humanoid.gltf",
+      "true_dragon_form": "res://assets/mortals/base_dragon_true.glb"
+    },
+    "BEASTHUMAN": {
+      "base_male": "res://assets/mortals/races/base_beasthuman_male.glb",
+      "base_female": "res://assets/mortals/races/base_beasthuman_female.glb"
+    },
+    "DEMON": {
+      "base": "res://assets/mortals/races/base_demon.gltf"
+    }
+  },
+  "animations": {
+    "ual1_standard": "res://assets/mortals/animations/ual1_standard.glb",
+    "ual1_standard_rm": "res://assets/mortals/animations/ual1_standard_rm.glb",
+    "ual2_standard": "res://assets/mortals/animations/ual2_standard.glb",
+    "ual2_standard_rm": "res://assets/mortals/animations/ual2_standard_rm.glb"
+  },
+  "directories": {
+    "outfits": "res://assets/mortals/outfits/",
+    "monsters": "res://assets/mortals/monsters/",
+    "village_buildings": "res://assets/buildings/village/",
+    "props": "res://assets/buildings/props/",
+    "dungeon": "res://assets/buildings/dungeon/",
+    "nature_stylized": "res://assets/nature/stylized/",
+    "particles": "res://assets/vfx/particles/",
+    "audio_rpg": "res://assets/audio/rpg/",
+    "audio_impacts": "res://assets/audio/impacts/",
+    "audio_ui": "res://assets/audio/ui/",
+    "audio_voice": "res://assets/audio/voice/"
+  }
+}

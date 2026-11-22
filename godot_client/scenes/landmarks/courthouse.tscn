@@ -1,0 +1,58 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/buildings/village/floor_brick.gltf" id="1_floor"]
+[ext_resource type="PackedScene" path="res://assets/buildings/village/wall_plaster_straight.gltf" id="2_wall"]
+[ext_resource type="PackedScene" path="res://assets/buildings/village/wall_plaster_door_round.gltf" id="3_door"]
+[ext_resource type="PackedScene" path="res://assets/buildings/props/table_large.gltf" id="4_bench"]
+[ext_resource type="PackedScene" path="res://assets/buildings/props/chair_1.gltf" id="5_chair"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/banner_red.gltf" id="6_banner"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/pillar.gltf" id="7_pillar"]
+[ext_resource type="PackedScene" path="res://assets/buildings/village/roof_round_tiles_6x10.gltf" id="8_roof"]
+
+[node name="Courthouse" type="Node3D"]
+
+[node name="Floor" parent="." instance=ExtResource("1_floor")]
+transform = Transform3D(8, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0)
+
+[node name="Pillar_L" parent="." instance=ExtResource("7_pillar")]
+transform = Transform3D(1.2, 0, 0, 0, 2, 0, 0, 0, 1.2, -5.5, 0, 7.5)
+
+[node name="Pillar_R" parent="." instance=ExtResource("7_pillar")]
+transform = Transform3D(1.2, 0, 0, 0, 2, 0, 0, 0, 1.2, 5.5, 0, 7.5)
+
+[node name="Wall_Back" parent="." instance=ExtResource("2_wall")]
+transform = Transform3D(4, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, -8)
+
+[node name="Wall_Door" parent="." instance=ExtResource("3_door")]
+transform = Transform3D(4, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 8)
+
+[node name="Roof" parent="." instance=ExtResource("8_roof")]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0, 6.5, 0)
+
+[node name="JudicialBench" parent="." instance=ExtResource("4_bench")]
+transform = Transform3D(1.8, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0, 0, -5)
+
+[node name="JudgeChair" parent="." instance=ExtResource("5_chair")]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0, 0, -6.5)
+
+[node name="Banner_L" parent="." instance=ExtResource("6_banner")]
+transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, -3.5, 3.2, -7.5)
+
+[node name="Banner_R" parent="." instance=ExtResource("6_banner")]
+transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 3.5, 3.2, -7.5)
+
+[node name="DocketBoardNode" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.2, 8.2)
+
+[node name="DocketBoardLabel" type="Label3D" parent="DocketBoardNode"]
+billboard = 1
+outline_render_priority = 1
+outline_size = 6
+font_size = 20
+modulate = Color(1, 0.4, 0.4, 1)
+outline_modulate = Color(0.12, 0.05, 0.05, 0.95)
+text = "=== HIGH COURTHOUSE OF GAIA ===
+Judiciary Status: Court in Order
+Active Cases: 0  •  Convictions: 0
+Criminal Records: Clean Registry
+Jurisdiction: All 5 Civilized Polities"
