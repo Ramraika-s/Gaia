@@ -109,97 +109,145 @@ Do **not** violate these rules in any module or refactor:
 │   ├── handoff_reports/                           # Sub-agent escalation reports
 │   └── backups/                                   # Ephemeral SHA-256 atomic rollback snapshots
 ├── docs/
+│   ├── INDEX.md                                       # Master documentation directory & architecture index
 │   ├── architecture/
-│   │   ├── ARCHITECTURE.md                        # Topology, LOD, WebSocket bridge, atomic 2PC, healer
-│   │   └── GODOT_CLIENT_AND_ASSETS_SPEC.md        # Godot 4.7.2, Terrain3D, Sky3D, VRoid, Quaternius/KayKit
+│   │   ├── ARCHITECTURE.md                            # Topology, LOD, WebSocket bridge, atomic 2PC, healer
+│   │   ├── GODOT_CLIENT_AND_ASSETS_SPEC.md            # Godot 4.7.2, Terrain3D, Sky3D, VRoid, Quaternius/KayKit
+│   │   ├── WORLD_GEOGRAPHY_AND_SETTLEMENTS_V4.md      # Concentric 8kmx8km 4-ring world, Acropolis, 5 cities
+│   │   ├── HYBRID_COGNITIVE_AND_LLM_SPEC.md           # 4-Pillar Hybrid Cognitive Core, Speech Acts, local LLM
+│   │   ├── ECONOMY_HOUSING_AND_GEAR_SPEC.md           # Closed-loop economy, housing market & gear specs
+│   │   └── WEBSOCKET_PROTOCOL_SPEC.md                 # Binary PackedFloat32Array & JSON frame contracts
 │   ├── simulation/
-│   │   ├── NEURAL_AND_LIFECYCLE_SPEC.md           # Slab-grown torch.bmm + GRU, stages, crying, seasons
-│   │   ├── RACES_AND_BIOLOGY_SPEC.md              # 5 races, 2 genders, cross-species pregnancy, Dragon morph
-│   │   ├── DIVINE_HIERARCHY_SPEC.md               # God -> World Goddess -> 5 God-Mothers, Age-10 choice, councils
-│   │   └── SOCIETY_AND_GOVERNANCE_SPEC.md         # Economy, WTC inflation, borders, Elder Library, Judiciary
+│   │   ├── NEURAL_AND_LIFECYCLE_SPEC.md               # Slab-grown torch.bmm + GRU, stages, crying, seasons
+│   │   ├── RACES_AND_BIOLOGY_SPEC.md                  # 5 races, 2 genders, cross-species pregnancy, Dragon morph
+│   │   ├── DIVINE_HIERARCHY_SPEC.md                   # God -> World Goddess -> 5 God-Mothers, Age-10 choice, councils
+│   │   └── SOCIETY_AND_GOVERNANCE_SPEC.md             # Economy, WTC inflation, borders, Elder Library, Judiciary
 │   ├── data/
-│   │   └── DATA_SCHEMA_AND_WORLD_GODDESS.md       # Pydantic v2 schemas, SQLite WAL DDL, DuckDB, validation
+│   │   └── DATA_SCHEMA_AND_WORLD_GODDESS.md           # Pydantic v2 schemas, SQLite WAL DDL, DuckDB, validation
+│   ├── guides/
+│   │   └── PLAYER_AND_OPERATOR_GUIDE.md               # Controls, CLI commands, UI modals & author workflows
 │   └── roadmap/
-│       └── IMPLEMENTATION_ROADMAP.md              # Phased build order (Phases 0-5), benchmarks & Godot slices
+│       └── IMPLEMENTATION_ROADMAP.md                  # Phased build order, Sprints 0-6 milestones & future ideas
+├── knowledge_foundry/                                 # Self-contained lore & book authoring repository
+│   ├── AGENTS.md                                      # Knowledge authoring invariants & rules
+│   ├── DEDUPE_AND_REVIEW_PLAYBOOK.md                  # 3-Stage deduplication & audit verification guide
+│   ├── SCHEMA_SPEC.md                                 # KnowledgePack & KnowledgeEntry schema specification
+│   └── subjects/                                      # 10 canonical subject reference documents
 ├── scripts/
-│   ├── setup_uv_env.sh                            # Pins compatible Python via uv & syncs dependencies
-│   └── interactive_toolchain_setup.py             # Checks/searches/installs Godot, Blender, VRoid & packs with user confirmation
+│   ├── celestial_ingest.py                            # Sandboxed celestial lore harvester & ingestion CLI
+│   ├── generate_world_heightmap.py                    # 8km x 8km 1024x1024 heightmap generator
+│   ├── interactive_toolchain_setup.py                 # Interactive host toolchain & CC0 pack checker
+│   ├── knowledge_merge.py                             # Atomic World Library merge CLI with deduplication
+│   ├── knowledge_review.py                            # 3-Stage pre-merge review CLI for staged packs
+│   ├── launch_gaia.py                                 # One-command simulator & Godot client launcher
+│   ├── qa_loop_guard.py                               # Deterministic multi-agent QA loop & rollback guard
+│   ├── setup_uv_env.sh                                # Pins compatible Python via uv & syncs dependencies
+│   ├── unpack_and_import_assets.py                    # Asset extractor and importer utility
+│   └── verify_live_qwen.py                            # Live smoke test for Qwen3.5-4B via llama-server
 ├── sim_core/
 │   ├── __init__.py
-│   ├── config.py                  # Day pacing (3600–7200s), LOD tiers, slab size (2048), RNG
-│   ├── schemas.py                 # Pydantic v2 domain, race, divine, appeal & IPC contracts
-│   ├── engine.py                  # Main tick loop, LOD scheduler, Reality Bubble, day-end hook
-│   ├── lifecycle.py               # Aging, stage gates, pregnancy, injury/illness, crying, death
-│   ├── races.py                   # RaceProfile registry (HUMAN, ELF, DRAGON, BEASTHUMAN, DEMON), Dragon morph
-│   ├── resilience/
-│   │   └── healer.py              # Self-Healing Error Solver + 5-fault/day [CRITICAL] escalation guard
-│   ├── spatial/
-│   │   ├── hash_grid.py           # NumPy O(1) spatial hash grid & 16x16m parcel border lookup
-│   │   └── heightmap.py           # world_heightmap.npy loader & O(1) elevation/slope queries
-│   ├── neural/
-│   │   ├── shared_net.py          # SharedSkillNet (MLP + survival gate + stage masking)
-│   │   ├── batched_self_net.py    # Unbounded 2048-slab torch.bmm + GRUCell working memory
-│   │   ├── trainer.py             # Batched rollout buffers, intrinsic curiosity, plasticity backprop
-│   │   └── social_learning.py     # Parental care/comforting, peer observation, library & traditions
+│   ├── config.py                                      # Master constants, pacing, LOD tiers, 8km world bounds
+│   ├── schemas.py                                     # Pydantic v2 domain, race, divine, appeal & IPC contracts
+│   ├── engine.py                                      # Main tick loop, LOD scheduler, Reality Bubble, day-end hook
+│   ├── lifecycle.py                                   # Aging, stage gates, pregnancy, crying, death
+│   ├── races.py                                       # RaceProfile registry (5 races), Dragon morph controller
+│   ├── brains/
+│   │   ├── consolidation.py                           # Sleep-cycle consolidation & stability gate
+│   │   ├── hierarchical_brain.py                      # 3-Tier hierarchical brain composition engine
+│   │   ├── memory_rag.py                              # Grounded RAG index with strict known_books asymmetry
+│   │   ├── personality.py                             # 10-D personality vector & dynamic mood states
+│   │   ├── profession_nets.py                         # ProfessionNetRegistry (10 professions Lv. 1-10)
+│   │   └── shared_living_net.py                       # SharedLivingNet universal survival/reflex MLP
 │   ├── divine/
-│   │   ├── hierarchy.py           # World Goddess + 5 Racial God-Mothers (names, traits, energy, Oracles)
-│   │   ├── sister_council.py      # 1-on-1 & 5-sister council dialogue, Divine Truces, Goddess mediation
-│   │   └── god_ledger.py          # GodPresenceTracker, prayer/altar salience grouping, daily .md ledger
-│   ├── society/
-│   │   ├── naming.py              # Racial/cultural phoneme birth names, dynasties, self-naming & epithets
-│   │   ├── borders.py             # Explicit non-overlapping 16x16m borders & settlement/Free City appeals
-│   │   ├── morality.py            # CombatContext tagging & per-faction/pairwise reputation
-│   │   ├── rumors.py              # Physical Rumor Packet propagation & decay
-│   │   ├── seasons.py             # 4-Season cycle & scarcity multipliers
-│   │   ├── economy.py             # Double-entry closed-loop credits & World Bank (sole issuer)
-│   │   ├── wtc_market.py          # World Trade Centre order-book exchange & M/Q inflation engine
-│   │   ├── property.py            # 16x16m chunk parcels, buy/sell/rent, probate & escheatment
-│   │   ├── politics.py            # Village->Town->City->State->Nation, Free Cities, Kings, Elections, Wars
-│   │   ├── religion.py            # Faiths, birth imprinting, intent-scaled prayer, decay, Popes, altars
-│   │   ├── judiciary.py           # Case filing, witness evidence, rulings, criminal records
-│   │   ├── traditions.py          # Emergent Cultural Memes (triggers, rituals, taboos)
-│   │   └── library.py             # World Library + Appointed Elders Council (max 2/nation, >50% vote)
-│   ├── persistence/
-│   │   ├── world_goddess.py       # WorldGoddessCritic RBAC/validation matrix + verdict feedback emitter
-│   │   ├── db.py                  # SQLite WAL atomic end-of-day writer + DuckDB read-only analytics
-│   │   └── checkpoints.py         # Atomic Two-Phase Commit (SHA-256 manifest) + corruption rewind
-│   ├── bridge/
-│   │   ├── base.py                # Abstract WorldAdapter interface
-│   │   ├── mock_adapter.py        # Fast headless adapter for unit & multi-thousand soak tests
-│   │   └── godot_ws_bridge.py     # WebSocket server (JSON events + binary PackedFloat32Array stream)
+│   │   ├── autonomy.py                                # Autonomous Divine Agenda Engine (6 deities)
+│   │   ├── god_ledger.py                              # GodPresenceTracker, salience grouping, daily .md ledger
+│   │   ├── hierarchy.py                               # World Goddess + 5 God-Mothers, traits, Oracles
+│   │   ├── llm_brain.py                               # Async llama.cpp client & grounded deterministic fallback
+│   │   └── sister_council.py                          # 1-on-1 & 5-sister council dialogue, Divine Truces
 │   ├── god_console/
-│   │   └── cli.py                 # Interactive Rich God CLI (inspect, intervene, speed, name deities, rewind)
-│   └── tools/
-│       ├── bench_tensors.py       # 10,000-agent slab-grown forward-pass & RAM benchmark
-│       └── soak_test.py           # 1,500-agent 5-race soak + atomic corruption rewind verifier
-├── godot_client/                  # Godot 4.7.2 stylized anime-fantasy 3D + Orbital Map client
+│   │   └── cli.py                                     # Interactive Rich God CLI (inspection, intervention, rewind)
+│   ├── knowledge/
+│   │   ├── dedupe.py                                  # 3-Stage cascaded deduplication engine
+│   │   └── schema.py                                  # KnowledgePack Pydantic models & validation rules
+│   ├── neural/
+│   │   ├── batched_self_net.py                        # Unbounded 2048-slab torch.bmm + GRUCell working memory
+│   │   ├── shared_net.py                              # SharedSkillNet baseline physical network
+│   │   ├── social_learning.py                         # Caregiving, peer observation, traditions
+│   │   └── trainer.py                                 # Batched rollout buffers, intrinsic curiosity, plasticity
+│   ├── persistence/
+│   │   ├── checkpoints.py                             # Atomic Two-Phase Commit (SHA-256 manifest) + rewind
+│   │   ├── db.py                                      # SQLite WAL atomic end-of-day writer + DuckDB analytics
+│   │   └── world_goddess.py                           # WorldGoddessCritic RBAC/validation matrix & verdicts
+│   ├── resilience/
+│   │   └── healer.py                                  # Self-Healing Error Solver + 5-faults/day escalation
+│   ├── society/
+│   │   ├── borders.py                                 # Explicit non-overlapping 16x16m chunk borders & appeals
+│   │   ├── economy.py                                 # Double-entry closed-loop credits & World Bank
+│   │   ├── gear_economy.py                            # Crafted outfits, accessories, tools/weapons economy
+│   │   ├── housing_market.py                          # Autonomous housing market, tier upgrades, probate
+│   │   ├── judiciary.py                               # Context-aware judicial rulings & criminal records
+│   │   ├── library.py                                 # Two-Book Governance (world_library + divine_codex)
+│   │   ├── morality.py                                # CombatContext tagging & per-faction reputation
+│   │   ├── naming.py                                  # Autonomous cultural naming, dynasties, epithets
+│   │   ├── politics.py                                # Settlement tiers, Neutral Free Cities, Kings, Wars
+│   │   ├── property.py                                # 16x16m deeds, buy/sell/rent, probate & escheatment
+│   │   ├── religion.py                                # Faiths, birth imprinting, intent-scaled prayer, altars
+│   │   ├── rumors.py                                  # Physical Rumor Packet propagation (8m acoustic range)
+│   │   ├── seasons.py                                 # 4-Season cycle & environmental scarcity multipliers
+│   │   ├── speech_acts.py                             # 8 Semantic Speech Acts engine & diegetic utterances
+│   │   ├── traditions.py                              # Emergent cultural traditions, rituals, taboos
+│   │   └── wtc_market.py                              # WTC order-book exchange & Fisher CPI inflation engine
+│   ├── spatial/
+│   │   ├── hash_grid.py                               # NumPy O(1) spatial hash grid & chunk parcel index
+│   │   ├── heightmap.py                               # 8km x 8km world_heightmap.npy O(1) elevation sampler
+│   │   └── navigation.py                              # Vectorized pathfinding & terrain slope traversal
+│   ├── tools/
+│   │   ├── bench_tensors.py                           # 10,000-agent slab-grown forward-pass latency benchmark
+│   │   └── soak_test.py                               # 1,500-agent 5-race soak & atomic corruption rewind test
+│   └── world/
+│       ├── city_layout.py                             # 5 Ring 1 Gated Cities, God-Mother Palaces, street grid
+│       ├── palace_security.py                         # Ring 0 Acropolis, Twin Dragons, 24 Palace Knights
+│       └── regional_weather.py                        # Dynamic regional weather cells & microclimates
+├── godot_client/                                      # Godot 4.7.2 stylized anime-fantasy 3D client
 │   ├── project.godot
-│   ├── addons/                    # Terrain3D v1.1.0, Sky3D v2.1, VRM Importer & MToon v2.6.1
-│   ├── assets/                    # 7 VRoid deities, 6 Quaternius/KayKit base rigs + Demon rig, modular buildings, VFX/SFX
-│   ├── shaders/                   # Global toon/cel shader, season_progress uniform, mortal instance HSV shader
-│   ├── scenes/                    # MainWorld, RealityBubblePool, OrbitalMap, Landmarks, GodAvatar, UI Modals
-│   └── scripts/                   # ws_client.gd, bubble_manager.gd, dragon_morph.gd, divine_hud.gd, library_modal.gd
-├── tests/
-│   ├── conftest.py                # Shared local SQLite & WorldState fixtures
-│   ├── test_schemas.py
-│   ├── test_world_goddess_rbac_and_atomic_save.py
-│   ├── test_healer_resilience.py
+│   ├── addons/                                        # Terrain3D v1.1.0, Sky3D v2.1, VRM Importer & MToon v2.6.1
+│   ├── assets/                                        # 7 VRoid deities, 6 Quaternius rigs + Demon rig, props, audio
+│   ├── scenes/                                        # MainWorld, RealityBubble, Landmarks, Buildings, UI Modals
+│   ├── shaders/                                       # TerrainBiome, WaterStylized, GrassSway, StylizedToonSeason
+│   └── scripts/                                       # Controllers, managers, animators, and UI modal scripts
+├── tests/                                             # 22 test files (109 passing tests under pytest)
+│   ├── conftest.py
 │   ├── test_batched_neural_unbounded.py
-│   ├── test_races_gender_pregnancy_dragon_morph.py
 │   ├── test_divine_hierarchy_patronage_and_councils.py
-│   ├── test_lifecycle_crying_and_naming.py
 │   ├── test_economy_double_entry_inflation.py
+│   ├── test_end_to_end_live_bridge.py
+│   ├── test_five_cities_and_building_sync.py
+│   ├── test_god_console_and_ws_bridge.py
+│   ├── test_healer_resilience.py
+│   ├── test_heightmap_parity.py
+│   ├── test_housing_gear_frontier_and_harvester.py
+│   ├── test_hybrid_cognitive_core.py
+│   ├── test_knowledge_foundry_dedupe_and_merge.py
+│   ├── test_lifecycle_crying_and_naming.py
+│   ├── test_local_llm_integration.py
+│   ├── test_palace_security_and_knights.py
+│   ├── test_persistence_corruption_rewind.py
 │   ├── test_politics_borders_library_religion.py
-│   └── test_persistence_corruption_rewind.py
-└── data/                          # Git-ignored runtime artifacts (DB, checkpoints, god_ledger, heightmap)
+│   ├── test_qa_loop.py
+│   ├── test_races_gender_pregnancy_dragon_morph.py
+│   ├── test_regional_weather.py
+│   ├── test_schemas.py
+│   ├── test_spatial_awareness_speech_and_deity_ai.py
+│   └── test_world_goddess_rbac_and_atomic_save.py
+└── data/                                              # Git-ignored runtime state (DB, checkpoints, god_ledger)
 ```
 
 ---
 
 ## 5. Tech Stack & Coding Standards
 - **Python Environment (`uv` Managed, Python `3.12`):** `torch` (CPU), `numpy`, `psutil`, `pydantic>=2.7`, `websockets`, `aiosqlite`, `duckdb`, `rich`, `pytest`, `pytest-asyncio`, `ruff`.
-- **3D Client (Phase 5):** **Godot 4.7.2** (Vulkan on Fedora 45 Wayland), `Terrain3D v1.1.0`, `Sky3D v2.1`, `VRM Importer & MToon Shader v2.6.1`, `VRoid Studio` (Steam/Proton, built-in polygon reduction), `Blender` (bone-parenting props only—**never** Decimate on rigged VRMs), `Quaternius` + `KayKit` + `Kenney` CC0 packs.
-- **IPC Protocol:** Native Godot `WebSocketPeer` ↔ Python `websockets` on `ws://127.0.0.1:8765` (JSON for discrete events/UI/prayers; raw binary `PackedFloat32Array` frames for bulk 10,000+ agent coordinates/states).
+- **3D Client (Godot 4.7.2):** **Godot 4.7.2** (Forward+ Vulkan / Mobile on Fedora 45 Wayland), `Terrain3D v1.1.0`, `Sky3D v2.1`, `VRM Importer & MToon Shader v2.6.1`, `VRoid Studio` (Steam/Proton, built-in polygon reduction), `Blender` (bone-parenting props only—**never** Decimate on rigged VRMs), `Quaternius` + `KayKit` + `Kenney` CC0 packs.
+- **IPC Protocol:** Native Godot `WebSocketPeer` ↔ Python `websockets` on `ws://127.0.0.1:8765` (JSON for discrete events/UI/prayers; raw binary `PackedFloat32Array` frames for bulk 10,000+ agent coordinates/states at 24 bytes/agent).
 - **Code Style:** Full Python type hints, Pydantic v2 validation, vectorized NumPy/PyTorch ops for all per-agent hot paths, deterministic seedable RNG (`sim_core/config.py`), structured logging with `agent_id` and `tick`, and zero bare `except:` blocks (always route through `ErrorHealer`).
 
 ---
@@ -207,7 +255,7 @@ Do **not** violate these rules in any module or refactor:
 ## 6. Verification Commands (Always via `uv run`)
 Before marking any task or milestone complete, run:
 ```bash
-uv run ruff check sim_core tests
+uv run ruff check sim_core tests scripts
 uv run pytest --tb=short -q
 # 1,500-agent 5-race headless soak test + atomic end-of-day save & corruption rewind verification
 uv run python -m sim_core.tools.soak_test --ticks 600 --agents 1500 --verify-atomic-rewind

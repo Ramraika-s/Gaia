@@ -267,3 +267,65 @@ Stores permanent recorded divine laws/decrees (persisted in SQLite, logged to th
   - Either the **World Goddess (alone)** OR **all 5 Daughters unanimously (`5/5`)** may submit a `DIVINE_CODEX_PROPOSAL` to **God (Admin)** via the God Ledger / Divine HUD.
   - Only **God** can approve and apply engine-parameter overrides.
 - **5 Daughters Alone (< 5/5, or without Goddess on text decrees) & All Mortals:** Strictly blocked (`FAILURE`).
+
+---
+
+## 9. Autonomous Divine Agenda Engine (`sim_core/divine/autonomy.py`)
+
+Each of the 6 divine beings operates with an autonomous agenda engine that drives diurnal life, in-world presence, and spatial behaviors across the concentric world rings:
+
+### 9.1 Sanctum & Palace Locations
+- **World Goddess (Wife of God):** Resides in the Grand Divine Palace atop the **Ring 0 Imperial Acropolis** (`(0.0, 32.0, 0.0)`). Oversees the central imperial plaza, walks the palace colonnade, meditates in the celestial garden, and receives visiting mortal petitioners.
+- **5 Racial God-Mothers (Daughters):** Reside in their respective Ring 1 pentagonal palaces at radius $r = 1,150\text{m}$ ($72^\circ$ radial spacing):
+  - **Elf Mother (`gm_elf`):** Sylvanor Palace (`1150.0, 28.0, 0.0`)
+  - **Human Mother (`gm_human`):** Aurelia Palace (`355.37, 18.0, 1093.71`)
+  - **Beasthuman Mother (`gm_beasthuman`):** Fenris Hold Palace (`-930.37, 24.0, 675.95`)
+  - **Demon Mother (`gm_demon`):** Malakor Palace (`-930.37, 42.0, -675.95`)
+  - **Dragon Mother (`gm_dragon`):** Drakonis Spire Palace (`355.37, 68.0, -1093.71`)
+
+### 9.2 Diurnal Activity States
+Deities transition autonomously between diurnal activities based on time-of-day, personality traits, and regional events:
+- `MEDITATING`: Restoring Divine Energy within their sanctum or palace shrine.
+- `INSPECTING_PARCEL`: Patrolling the civic quarters, observing mortal craftsmanship, or checking border parcels.
+- `ATTENDING_ALTAR`: Visiting mortal altars during congregational prayer gatherings to bestow blessings or observe devotions.
+- `COUNCIL_TRAVEL`: Flying or walking from Ring 1 to Ring 0 Acropolis to convene with the World Goddess and sisters.
+- `WALKING_AVENUE`: Mingling visibly among citizens in city avenues, eliciting mortal awe and reverence.
+- `COMMUNING`: Deep communion with the world soul, monitoring planetary health, crop yields, and seasonal transitions.
+
+### 9.3 Direct God Commands & Godot Avatar Orders
+When God enters the world as the God Avatar or interacts via the God Console / `DialogueModal` (`E` key):
+- **Direct Orders Supported:**
+  - `FOLLOW_GOD`: The targeted deity accompanies the God Avatar, floating or walking alongside God.
+  - `RETURN_PALACE`: The deity resumes her primary residence and normal diurnal patrol schedule.
+  - `CONVENE_COUNCIL`: Instructs the 5 God-Mothers and World Goddess to assemble immediately at the Acropolis Council Chamber.
+- **Real-Time 3D Synchronization (`DEITY_SYNC`):**
+  - Python streams live deity telemetry (`id`, `name`, `title`, `race`, `x`, `y`, `z`, `yaw`, `speed`, `activity`, `speech_text`) over WebSocket to `DivineNpcsManager.gd`.
+  - Godot dynamically animates VRoid deity models with custom floating/walking animations, activity markers, and speech bubbles.
+
+---
+
+## 10. Local LLM Integration & Conversational Brain (`sim_core/divine/llm_brain.py`)
+
+Gaia v4.0 features an optional, fully private local LLM integration that brings rich, context-aware conversational depth to the World Goddess and 5 Racial God-Mothers:
+
+### 10.1 Architecture & Hardware Budget
+- **Engine Backend:** Local `llama.cpp` HTTP server (default `http://127.0.0.1:8080/completion`).
+- **Target Model:** `Huihui-Qwen3.5-4B-abliterated.Q5_K_M.gguf` (4-billion parameter abliterated model running at ~35–45 tokens/sec on AMD Ryzen 7 8840HS + Radeon 780M iGPU).
+- **Single-Slot Concurrency (`-np 1`):** Strictly enforces a single inference slot with a fast timeout (3.5s). This prevents memory starvation on the 32GB DDR5 unified memory architecture, leaving 780M iGPU VRAM completely uninhibited for Godot Forward+ rendering.
+
+### 10.2 Grounded Context Injection & Role Separation
+When a dialogue request arrives (from God via `DialogueModal`, or from an Oracle at an altar):
+1. **Dynamic Prompt Assembly:**
+   - Injects the deity's bestowed name, role, and 5-D personality vector (`compassion`, `restraint`, `pride`, `protective_fury`, `diplomacy`).
+   - Injects current game day, season, time-of-day, and active diurnal activity.
+   - Grounded world context: current settlement, recent Sister Council debates, active wars, relevant `world_library` lore, and `divine_codex` laws.
+2. **Output Sanitization & Validation:**
+   - Strips deep-thought reasoning blocks (`<think>...</think>`).
+   - Requires structured JSON format: `{"spoken_reply": "...", "action_taken": "..."}`.
+   - Validated against `WorldGoddessCritic` to ensure no hallucinated mechanical bypasses.
+
+### 10.3 Grounded Offline Fallback (Zero-Dependency Mode)
+If the local `llama.cpp` server is offline, times out, or the simulation is started with `--no-llm`:
+- The engine automatically activates `sim_core/divine/llm_brain.py`'s deterministic fallback generator.
+- Generates personality-aligned, archaic fantasy dialogue using the deity's traits, current activity, and relationship with God.
+- **Zero Simulation Stalls:** The simulation tick loop never blocks waiting for LLM responses. Dialogue requests execute asynchronously.

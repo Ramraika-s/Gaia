@@ -30,7 +30,7 @@ Faith is a living, fluctuating social force integrated with the **Divine Family 
 - All mortal prayers, gratitude messages, and crisis pleas route strictly to:
   1. The mortal's **Racial God-Mother** (`agent.patron_godmother_slot`; for mixed-race children under age 10, either parental God-Mother until their **Age-10 Patronage Choice**), OR
   2. The **World Goddess (Wife of God)** (for inter-racial/Neutral Free City altars, seasonal crises, or world-wide petitions).
-- **God** receives messages *exclusively* from the **World Goddess** and the **4 Racial God-Mothers**, who relay notable prayers, congregational altar calls, Sister Council debates, and world crises.
+- **God** receives messages *exclusively* from the **World Goddess** and the **5 Racial God-Mothers**, who relay notable prayers, congregational altar calls, Sister Council debates, and world crises.
 
 ### 2.3 Intent-Scaled Prayer Gains & Inactivity Decay
 When an agent executes `PERFORM_TRADITION_OR_PRAY`, its `faith_devotion` (and for uncommitted mixed-race children under age 10, its per-deity `godmother_affinities`) updates based on **why** it prayed:
@@ -76,7 +76,10 @@ Read access is open to all mortals and deities.
        - Once **`>= 1`** God-Mother approves, the proposal enters a **1-game-day objection window** (`OBJECTION_WINDOW`).
        - If **`> 50%` (`>= 3/5`)** of God-Mothers object before the 1-day window closes, it is **blocked** (`BLOCKED_BY_DAUGHTERS`). Blocked proposals may be formally appealed to the **World Goddess** or **God** for final judgment.
        - Otherwise, once the 1-day window elapses with `< 3` objections, it **passes and commits** (`APPROVED`) into `world_library`.
-  5. **Unauthorized Attempts:** Any random agent attempting an unauthorized Library edit receives `CriticVerdict(status="FAILURE")`. Vandalism against Library halls opens a `VANDALISM` Judiciary case.
+  5. **Knowledge Foundry Integration & Deduplication:**
+     - Book proposals support structured metadata (`subject`, `section`, `fact_key`, `tags`, `mechanical_effects`, `author_type`).
+     - Mortals cannot author duplicate knowledge if a book with the same `fact_key` already exists, unless explicitly filed as a `SUPERSEDE` action citing conflicting evidence.
+  6. **Unauthorized Attempts:** Any random agent attempting an unauthorized Library edit receives `CriticVerdict(status="FAILURE")`. Vandalism against Library halls opens a `VANDALISM` Judiciary case.
 
 ### 3.2 Divine Rules Book (`divine_codex`) — Divine Laws & Live Parameter Overrides
 Read access is open to all. Stores permanent recorded divine laws/decrees (persisted in SQLite, logged to the God Ledger, referenced by Sister Councils) **and** dynamic live engine-parameter overrides (e.g., Non-Aggression Covenant penalties, Divine Truce duration, intervention cooldowns).
@@ -137,6 +140,18 @@ Settlements cannot silently self-declare higher status. To earn or upgrade a tit
   $$\text{CPI}_t = \frac{\sum_k w_k P_k(t)}{\sum_k w_k P_k(0)}, \qquad \text{Monetary Pressure} = \frac{M_t / Q_t}{M_0 / Q_0}$$
 - Winter scarcity or excessive war borrowing spikes `CPI`, eroding real wages and driving voter backlash, unrest, or fiscal tightening.
 
+### 5.3 Gear Economy & Reality Bubble Equipment (`sim_core/society/gear_economy.py`)
+Mortal competence and visual status are enhanced by a closed-loop equipment economy:
+- **Gear Categories:**
+  - `CLOTHING`: E.g., `PEASANT_TUNIC` (20 credits), `RANGER_CLOAK` (55 credits), `MAGE_ROBE` (120 credits).
+  - `ACCESSORY`: E.g., `SCHOLAR_AMULET` (40 credits), `LEATHER_BACKPACK` (35 credits), `WARRIOR_HELMET` (85 credits).
+  - `TOOL_WEAPON`: E.g., `IRON_SWORD` (75 credits), `BLACKSMITH_HAMMER` (45 credits), `WOODCUTTER_AXE` (30 credits), `DIVINE_STAFF` (180 credits).
+- **Profession-Driven Purchasing:**
+  - Living mortals purchase tools, weapons, and outfits matching their profession and surplus savings directly from Blacksmith and Merchant shops via closed-loop `WorldBank` double-entry debits.
+- **Visual Socket Sync (`equipped_gear`):**
+  - Python streams `equipped_gear: list[str]` inside `BUBBLE_SYNC` frames over WebSocket.
+  - Godot's `HumanoidAnimator.gd` attaches modular 3D meshes to designated bone sockets (`Hand_R`, `Hand_L`, `Spine`, `Head`), giving visible mortals distinctive outfits and tools without separate draw calls.
+
 ---
 
 ## 6. Property Ownership, Real Estate, Escheatment, Traditions & Judiciary
@@ -150,7 +165,16 @@ Every `16×16m` parcel tracks `owner_id`, `owner_type` (`AGENT`, `SETTLEMENT`, `
      - **Inside any Village/Town/City/State/Nation border:** Ownership transfers automatically to that **Settlement / Kingdom Treasury** (auctionable at the WTC or grantable to citizens).
      - **Outside all borders (Wilderness):** Flips to **`UNCLAIMED` (Nameless, `owner_id = None`)**—switching its Godot structures to abandoned ruins open to any settler or squatter.
 
-### 6.2 Emergent Traditions (`sim_core/society/traditions.py`) & Judiciary (`judiciary.py`)
+### 6.2 Autonomous Housing Market & Frontier Pioneering (`sim_core/society/housing_market.py`)
+- **Closed-Loop Home Ownership:**
+  - Unhoused mortal adults purchase available for-sale cottages (`HOUSE_T1_COTTAGE`, base price 60.0 credits) using accumulated savings transferred to sellers or settlement treasuries.
+- **In-Place Tier Upgrades:**
+  - Homeowners upgrade properties in-place as wealth grows: `HOUSE_T1_COTTAGE` $\rightarrow$ `HOUSE_T2_TOWNHOUSE` (120 credits) $\rightarrow$ `HOUSE_T3_MANOR` (250 credits), expanding household size and raising civic standing.
+- **Frontier Wilderness Pioneering (Ring 2):**
+  - Ambitious or crowded citizens migrate into the Ring 2 Frontier Wilderness ($1,500\text{m} \le r \le 3,300\text{m}$), clear land, and erect pioneer cottages.
+  - When $\ge 5$ pioneer cottages cluster within $120\text{m}$, the pioneers organically petition for a new **`VILLAGE`** tier recognition via `WorldGoddessCritic`.
+
+### 6.3 Emergent Traditions (`sim_core/society/traditions.py`) & Judiciary (`judiciary.py`)
 - **Traditions:** Evolvable `TraditionRecord` memes (`FIRST_DAY_OF_WINTER`, `HARVEST_SURPLUS`, `ROYAL_DEATH`, `MARRIAGE`, `WAR_VICTORY`, `GOD_SIGHTING`) with ritual actions and local `taboo_penalty` when ignored; carried by migrants across racial and national borders.
 - **Judiciary:** Adjudicates `THEFT`, `UNPROVOKED_ATTACK`, `VANDALISM`, `DEBT_DEFAULT`, `TRESPASS`, and `CONTESTED_COMBAT`. Verified `SELF_DEFENSE`, `DEFENDING_KIN_OR_TOWN`, and `ACTIVE_WAR` are automatically `ACQUITTED` with zero domestic criminal record. Maintains **Population Ledger**, **Fatality Index** (including infant mortality and cross-species birth complications by race/season), and **Criminal Records**.
 
@@ -162,7 +186,7 @@ You oversee the world through **three synchronized interfaces**:
 1. **Godot 4.7.2 Unified 3D Client & Orbital God Map (`godot_client/`):**
    - **3D Reality Bubble (`60–120` pooled mortals within `120–160m`):** Fly freely in RTS mode or drop down as your visible `god_avatar.vrm` (`is_god = true`). Walk into WTC halls to read live `UPDATE_ONCE` CPI/price boards, click Library Lecterns to open the 2D `TextEdit` modal (routed via WebSocket to Python), spot `AltarPrayerBeacon` light pillars, and watch Dragons shift to `TRUE_DRAGON` form.
    - **Orbital God Map (`> 250m` altitude):** Zoom out to see all **10,000+ agents** in 1 draw call (`MultiMeshInstance3D`), explicit `16×16m` borders, wars, religions, and inflation heatmaps; click anywhere to swoop back into 3D.
-   - **In-Godot Divine Family HUD:** Live stream of messages from the **World Goddess** and **4 Racial God-Mothers**, Sister Council summaries, `ErrorHealer` alerts, deity naming, and `speed 1x..60x` controls.
+   - **In-Godot Divine Family HUD:** Live stream of messages from the **World Goddess** and **5 Racial God-Mothers**, Sister Council summaries, `ErrorHealer` alerts, deity naming, and `speed 1x..60x` controls.
 2. **God Presence & Persistent Daily God Ledger (`sim_core/divine/god_ledger.py`):**
    - **Active (Godot or CLI connected):** Divine Family reports, escalated prayers, congregational altar calls (with Prayer Head), and `ErrorHealer` alerts stream **in real time**.
    - **Away (AFK):** Buffered strictly in RAM during the 1–2 real-hour game day and flushed atomically by the **World Goddess** at end-of-day into **`data/god_ledger/day_XXXXX.md`** (and `latest.md`).

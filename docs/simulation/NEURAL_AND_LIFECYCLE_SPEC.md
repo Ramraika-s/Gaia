@@ -1,10 +1,24 @@
-# NEURAL_AND_LIFECYCLE_SPEC.md — Unbounded Slab-Grown Tensor Brains, GRU Memory, LOD, Distress/Crying, 4-Race Lifecycle, Naming, Imprinting & Mortality 
+# NEURAL_AND_LIFECYCLE_SPEC.md — 4-Pillar Hybrid Cognitive Core, Unbounded Slab-Grown Tensor Brains, GRU Memory, 8 Semantic Speech Acts, 5-Race Lifecycle, Distress/Crying & Mortality 
 
-## 1. Unbounded Batched Tensor Brain Architecture (`sim_core/neural/`)
+## 1. Unbounded Batched Tensor Brain Architecture & 4-Pillar Hybrid Cognitive Core (`sim_core/neural/`, `sim_core/brains/`)
 There is **no hard `MAX_AGENTS` cap**. To simulate **1,000–10,000+ (and growing) unique, individually-evolved neural agents** in ~8–15 ms per cognitive tick on an AMD Ryzen 7 8840HS CPU (under 250 MB RAM at 10,000 agents), never loop over separate PyTorch `nn.Module` instances in Python. Pack all living agents into **contiguous slot-indexed tensors** (`slot_idx in [0, capacity)`), dynamically grown in **slabs of `2,048` slots** via `torch.cat` whenever `free_slots` is empty.
 
+### The 4-Pillar Hybrid Cognitive Architecture
+Gaia v4.0 introduces the **4-Pillar Hybrid Cognitive Core** (`sim_core/brains/`):
+- **Pillar 1 — 3-Tier Hierarchical Neural Brain:**
+  - **Tier 1 (`SharedLivingNet`):** Species-wide base physical survival and caregiving reflexes (Linear 32 $\rightarrow$ 64 $\rightarrow$ 64 $\rightarrow$ 20).
+  - **Tier 2 (`ProfessionNetRegistry`):** 10 vocational MLP networks (Lv. 1–10 mastery) covering `FARMER`, `LUMBERJACK`, `MINER`, `BLACKSMITH`, `MERCHANT`, `BUILDER`, `GUARD`, `SCHOLAR`, `CLERIC`, and `HERBALIST`.
+  - **Tier 3 (`BatchedAgentSelfNet`):** Slab-grown per-agent unique weights with manual `torch.bmm` + `GRUCell(20, 32)` working memory modulating preferences.
+- **Pillar 2 — Grounded `MemoryRAGIndex`:**
+  - Strict information asymmetry: mortal agents can only recall memories or cite books they have physically read or been told (`known_books: set[str]`). Zero global state hallucination.
+- **Pillar 3 — 10-D `PersonalityVector` & `MoodState`:**
+  - 10 orthogonal personality dimensions: `openness`, `conscientiousness`, `extraversion`, `agreeableness`, `neuroticism`, `ambition`, `caution`, `loyalty`, `rule_respect`, `faith_devotion`.
+  - Couplings to dynamic `MoodState` (`joy`, `anger`, `fear`, `gloom`, `calm`) shaping action logit biases.
+- **Pillar 4 — `SleepCycleConsolidator`:**
+  - End-of-day sleep consolidation distilling daily episodic experiences into long-term traits with bounded drift ($\le 0.05$ per day).
+
 - **Soft RAM Watermark:** `psutil` checks host memory once per civic tick; exceeding **75% host RAM** emits a `[RAM_WATERMARK]` alert to the World Goddess, God Console, Godot Divine HUD, and God Ledger without crashing or blocking births.
-- **Race-Extensible Design (No Tensor Bloat):** Racial biology, lifespans, learning speeds, and visual scales are applied via the **`RaceProfile` multiplier layer** (`sim_core/races.py`, see `docs/simulation/RACES_AND_BIOLOGY_SPEC.md`) rather than hardcoding race-specific network dimensions. Existing neural checkpoints remain cleanly compatible across all 4 races and any future sub-lineages.
+- **Race-Extensible Design (No Tensor Bloat):** Racial biology, lifespans, learning speeds, and visual scales are applied via the **`RaceProfile` multiplier layer** (`sim_core/races.py`, see `docs/simulation/RACES_AND_BIOLOGY_SPEC.md`) rather than hardcoding race-specific network dimensions. Existing neural checkpoints remain cleanly compatible across all 5 races (`HUMAN`, `ELF`, `DRAGON`, `BEASTHUMAN`, `DEMON`) and any future sub-lineages.
 - **Multi-Tier Cognitive LOD:** Every tick evaluates active slots according to LOD tier:
   - **Tier 0 (3D Reality Bubble, `<= 160m` of God's camera):** `2 Hz` (every tick), synced to Godot's pre-allocated 60–120 mortal node pool.
   - **Tier 1 (Distant Awake):** `1 Hz` (every 2nd tick, staggered even/odd batches).
@@ -97,6 +111,19 @@ Actions `0..16` execute physically with animations in Godot 4.7.2 when inside th
 | `18` | `PROPERTY_BUY_OR_SELL` | `ADULT` | Buy unclaimed/listed `16×16m` parcel, list own parcel, or collect rent |
 | `19` | `CIVIC_OR_BREED_ACTION` | `ADULT` | Propose breeding, vote/campaign, vote on Library Elder Council, submit settlement/Free City appeal to World Goddess, apply for Bank loan |
 
+### 2.1 The 8 Semantic Speech Acts (`sim_core/society/speech_acts.py`)
+In addition to macro primitives, agents engage in physical acoustic dialogues (8m radius) through structured `SpeechActRecord`s:
+1. `GREET`: Polite acknowledgement between neighbors, raising pairwise `affinity` (`+0.02`).
+2. `WARN_PRICE_SPIKE`: Alerts nearby consumers of high WTC inflation or commodity spikes, logging to their `MemoryRAGIndex`.
+3. `TRADE_OFFER`: Direct bilateral barter or sale proposal between merchants and citizens.
+4. `SHARE_BOOK_LORE`: Scholar or elder shares knowledge from a known World Library book with an apprentice (`teach_knowledge()`).
+5. `REPORT_CRIME`: Witness shouts a crime report, instantly alerting nearby Palace Knights or City Guards and filing a case in the Judiciary.
+6. `PRAYER_CALL`: Devout citizen or cleric rallies nearby faithful to join a Congregational Altar Prayer.
+7. `COURT`: Romantic courtship proposition, checking mutual readiness and boosting mutual affinity if successful.
+8. `POLITICAL_DEBATE`: Public campaign speech in settlement square, influencing votes for Headman, Mayor, or King elections.
+
+- **Godot Reality Bubble Visualization:** Diegetic fantasy utterances (e.g., *"Good hunting to you, kin!"* or *"Watch your step around me, scholar."*) stream over `BUBBLE_SYNC` as `speech_text` to display above mortal heads in Godot.
+
 ---
 
 ## 3. Intrinsic Curiosity, Self-Awareness, Dependency Trap & Batched Backpropagation (`sim_core/neural/trainer.py`)
@@ -155,7 +182,7 @@ For `race == "DRAGON"` agents (`stage in {"ADULT", "ELDER"}`):
 
 ## 5. Developmental Stage Gates, Seasons & Autonomous Naming
 ### 5.1 Race-Scaled Stage Gates & Godot Bone Scaling
-1 Game Day = `REAL_SECONDS_PER_GAME_DAY` (default `5400`s = 1.5 real hrs, tunable `3600–7200`s). Stage age thresholds scale by `L = RaceProfile.lifespan_multiplier` (`HUMAN 1.0x`, `BEASTHUMAN 1.0–1.5x`, `ELF 3.0x`, `DRAGON 6.0x`):
+1 Game Day = `REAL_SECONDS_PER_GAME_DAY` (default `5400`s = 1.5 real hrs, tunable `3600–7200`s). Stage age thresholds scale by `L = RaceProfile.lifespan_multiplier` (`HUMAN 1.0x`, `BEASTHUMAN 1.0–1.5x`, `DEMON 2.8x`, `ELF 3.0x`, `DRAGON 6.0x`):
 
 | Stage | Min Age (Game Days) | Base Max Health (× Race Mult) | Godot Height Scale (× Race Scale) | Sensory Radius | Promotion Threshold (`WorldGoddessCritic` `STAGE_UP`) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -187,7 +214,7 @@ Each season lasts **`7` Game Days** (`1` Year = `28` Game Days), continuously up
 ### 6.1 Breeding Eligibility, Genetic Crossover & Cultural Imprinting
 Two living `ADULT` agents $P_1, P_2$ may initiate breeding when **all** hold and `WorldGoddessCritic` approves `BIRTH`:
 - **Strict Binary Gender Rule:** `P1.gender != P2.gender` (strictly one `BOY` and one `GIRL`).
-- **Cross-Species & Dragon Rule:** All 4 races may mate with each other (Dragons must be in `HUMANOID_DRAGON` form when mating with non-dragons). Same-race pairings conceive at `100%`; cross-species pairings (`P1.race != P2.race`) roll **`50%` conception** (`CONCEPTION` commit).
+- **Cross-Species & Dragon Rule:** All 5 races may mate with each other (Dragons must be in `HUMANOID_DRAGON` form when mating with non-dragons). Same-race pairings conceive at `100%`; cross-species pairings (`P1.race != P2.race`) roll **`50%` conception** (`CONCEPTION` commit).
 - **Gestation & Delivery:** On conception, the female (`GIRL`) enters pregnancy for `mother.race.gestation_days` (`1.2` to `7.0` game days, `1.15x` hunger drain, `0.90x` speed). On delivery, cross-species births roll **`60%` survival** (stillbirths log `BIRTH_COMPLICATION` with zero tensor slot allocated); surviving mixed-race newborns start with `patron_godmother_slot = None` until their **Age-10 Patronage Choice**.
 - **Biological & Social Readiness:** Proximity `<= 5m`, disjoint `parent_ids`, `health >= 70%` of `max_health`, `hunger >= 60`, `breeding_cooldown == 0` (scaled by `RaceProfile.breeding_cooldown_mult`), mutual `affinity >= 0.6`, and `trust >= 0.5`.
 - **Offspring Generation:**

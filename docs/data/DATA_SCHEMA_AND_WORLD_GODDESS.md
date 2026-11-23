@@ -21,7 +21,19 @@ Stage = Literal["INFANT", "CHILD", "ADULT", "ELDER"]
 Season = Literal["SPRING", "SUMMER", "AUTUMN", "WINTER"]
 SettlementTier = Literal["VILLAGE", "TOWN", "CITY", "STATE", "NATION"]
 RegimeType = Literal["KING", "ELECTED"]
-ParcelOwnerType = Literal["AGENT", "SETTLEMENT", "NATION", "CHURCH", "UNCLAIMED"]
+ParcelOwnerType = Literal["AGENT", "INDIVIDUAL", "SETTLEMENT", "NATION", "CHURCH", "UNCLAIMED"]
+BuildingType = Literal[
+    "GODMOTHER_PALACE",
+    "CITY_GATE",
+    "WALL_SEGMENT",
+    "HOUSE_T1_COTTAGE",
+    "HOUSE_T2_TOWNHOUSE",
+    "HOUSE_T3_MANOR",
+    "SHOP_MARKET",
+    "SHOP_BLACKSMITH",
+    "SHOP_TAVERN",
+]
+RacialStyle = Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"]
 
 PrayerIntent = Literal[
     "EARNEST_VOLUNTARY",
@@ -29,6 +41,8 @@ PrayerIntent = Literal[
     "CONGREGATIONAL_ALTAR",
     "CRISIS_PLEA",
     "PARENT_DIRECTED",
+    "PETITION",
+    "OBLIGATION",
 ]
 
 CombatContext = Literal[
@@ -318,6 +332,13 @@ class WorldLibraryEntry(BaseModel):
     is_scripture: bool = False
     read_count: int = 0
     created_tick: int
+    body: Optional[str] = None
+    subject: Optional[str] = None
+    section: Optional[str] = None
+    fact_key: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+    mechanical_effects: dict[str, float] = Field(default_factory=dict)
+    author_type: Literal["DIVINE", "MORTAL", "SYSTEM", "UNKNOWN"] = "MORTAL"
 
 class LibraryCouncilElderRecord(BaseModel):
     nation_id: str
@@ -345,6 +366,15 @@ class LibraryProposalRecord(BaseModel):
         "BLOCKED_BY_DAUGHTERS", "EXPIRED", "APPROVED", "REJECTED"
     ] = "OPEN"
     created_tick: int
+    body: Optional[str] = None
+    subject: Optional[str] = None
+    section: Optional[str] = None
+    fact_key: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+    mechanical_effects: dict[str, float] = Field(default_factory=dict)
+    author_type: Literal["DIVINE", "MORTAL", "SYSTEM", "UNKNOWN"] = "MORTAL"
+    supersedes: list[str] = Field(default_factory=list)
+    distinct_from: list[str] = Field(default_factory=list)
 
 class DivineCodexEntry(BaseModel):
     entry_id: str
@@ -431,6 +461,115 @@ class CriticVerdict(BaseModel):
     status: Literal["SUCCESS", "FAILURE"]
     reason: str
     committed_tick: Optional[int] = None
+
+PalaceDecision = Literal["GRANT", "DENY", "ESCORT"]
+PalaceRequestStatus = Literal["PENDING", "GRANTED", "DENIED", "ESCORTED", "EXPIRED"]
+
+class PalacePass(BaseModel):
+    pass_id: str
+    agent_id: str
+    granted_by: Literal["GOD", "WORLD_GODDESS"]
+    granted_tick: int
+    expires_tick: int
+
+class PalaceEntryRequest(BaseModel):
+    request_id: str
+    agent_id: str
+    name: str
+    race: RaceId
+    title: Optional[str] = None
+    criminal_count: int = 0
+    faith_devotion: float = 0.5
+    reason: str = "Petitioning Audience"
+    tick: int = 0
+    status: PalaceRequestStatus = "PENDING"
+
+class BuildingRecord(BaseModel):
+    building_id: str
+    city_id: str
+    building_type: BuildingType
+    racial_style: RacialStyle
+    x: float
+    y: float
+    z: float
+    rotation_y: float
+    parcel_x: int
+    parcel_z: int
+    footprint_radius: float = 8.0
+    owner_id: Optional[str] = None
+    owner_name: Optional[str] = None
+    for_sale: bool = False
+    sale_price: float = 0.0
+    settlement_id: Optional[str] = None
+    is_frontier: bool = False
+
+class CityRecord(BaseModel):
+    city_id: str
+    name: str
+    native_race: RaceId
+    racial_style: RacialStyle
+    center_x: float
+    center_z: float
+    elevation_y: float
+    curtain_wall_radius: float = 240.0
+    godmother_slot: RacialGodMotherSlot
+    buildings_count: int = 0
+
+SpeechActType = Literal[
+    "GREET",
+    "WARN_PRICE_SPIKE",
+    "TRADE_OFFER",
+    "SHARE_BOOK_LORE",
+    "REPORT_CRIME",
+    "PRAYER_CALL",
+    "COURT",
+    "POLITICAL_DEBATE",
+]
+
+class SpeechActRecord(BaseModel):
+    speech_id: str
+    speaker_id: str
+    speaker_name: str = ""
+    listener_id: Optional[str] = None
+    act_type: SpeechActType
+    topic: str = ""
+    value: float = 0.0
+    sentiment: float = Field(default=0.0, ge=-1.0, le=1.0)
+    trust_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    tick: int = 0
+    short_utterance: str = ""
+
+class DeitySyncRecord(BaseModel):
+    id: str
+    name: str
+    title: str = ""
+    race: str = "DIVINE"
+    x: float
+    y: float
+    z: float
+    yaw: float = 0.0
+    speed: float = 0.0
+    activity: str = "IDLE"
+    speech_text: str = ""
+
+class DialogueRequest(BaseModel):
+    type: Literal["DIALOGUE_REQUEST"] = "DIALOGUE_REQUEST"
+    dialogue_id: str = ""
+    target_type: Literal["DEITY", "MORTAL"] = "DEITY"
+    target_id: str
+    message: str
+    order: str = ""
+
+class DialogueResponse(BaseModel):
+    type: Literal["DIALOGUE_RESPONSE"] = "DIALOGUE_RESPONSE"
+    target_id: str
+    target_name: str
+    title: str = ""
+    race: str = "DIVINE"
+    mood: str = "calm"
+    spoken_reply: str
+    action_taken: str = ""
+    llm_backend: str = "OFFLINE_FALLBACK"
 ```
 
 ---
@@ -684,7 +823,13 @@ CREATE TABLE IF NOT EXISTS world_library (
     skill_bonus REAL NOT NULL,
     is_scripture INTEGER NOT NULL DEFAULT 0,
     read_count INTEGER NOT NULL DEFAULT 0,
-    created_tick INTEGER NOT NULL
+    created_tick INTEGER NOT NULL,
+    subject TEXT,
+    section TEXT,
+    fact_key TEXT,
+    tags_json TEXT,
+    mechanical_effects_json TEXT,
+    author_type TEXT DEFAULT 'MORTAL'
 );
 
 CREATE TABLE IF NOT EXISTS library_council_elders (
@@ -815,7 +960,7 @@ def run_analytics_query(db_path: str, sql: str) -> list[dict]:
 Standard analytics views supported out of the box:
 - **Racial Demographics & Cross-Species Birth Survival:** Compares live births vs. `civ.fatalities` (`cause = 'BIRTH_COMPLICATION'`) grouped by `(race, secondary_heritage_race)`.
 - **Infant Mortality vs. Season & WTC Inflation:** Joins `civ.fatalities` (`stage_at_death = 'INFANT'`) against `civ.wtc_history` (`cpi`).
-- **Patronage Distribution of Mixed-Race Citizens:** Tracks how Age-10 mixed-race children dedicate across the 4 Racial God-Mothers and how often the World Goddess breaks ties.
+- **Patronage Distribution of Mixed-Race Citizens:** Tracks how Age-10 mixed-race children dedicate across the 5 Racial God-Mothers and how often the World Goddess breaks ties.
 - **Wealth Gini, Land Concentration & War Debt:** Computes credit/parcel concentration per settlement and correlates wars with World Bank loan delinquencies.
 
 ---
@@ -867,7 +1012,7 @@ No mid-day disk flushes and **no 15-minute crash journal**. At the final tick of
 3. **Phase 2 — Synchronized Daily Artifacts + SHA-256 Checksums:**
    - Write `data/checkpoints/day_{D:05d}.pt.tmp` (`SharedSkillNet`, slab-grown `BatchedAgentSelfNet` weights + `H` + `free_slots`, RNG states, `money_supply_m`, `world_bank_reserve`).
    - Online-backup `data/civilization.db` to `data/checkpoints/day_{D:05d}.db.tmp`.
-   - Render `data/god_ledger/day_{D:05d}.md.tmp` (and `latest.md.tmp`) compiled by the **World Goddess**, containing her daily summary, 4 Racial God-Mother escalations, congregational altar Prayer Head reports, Inter-Sister Council logs, Age-10 tie-break decrees, and `ErrorHealer` alerts.
+   - Render `data/god_ledger/day_{D:05d}.md.tmp` (and `latest.md.tmp`) compiled by the **World Goddess**, containing her daily summary, 5 Racial God-Mother escalations, congregational altar Prayer Head reports, Inter-Sister Council logs, Age-10 tie-break decrees, and `ErrorHealer` alerts.
    - Compute **SHA-256** hashes of `.db.tmp` and `.pt.tmp`, call `os.fsync()`, and atomically `os.replace()` all `.tmp` files to final paths.
 4. **Phase 3 — Manifest Written Last (`data/checkpoints/manifest.json`):**
    - Atomically write `DailyManifest(status="VERIFIED")` **only after Phases 1–2 succeed**. Retain the last `7` verified daily snapshots to bound SSD usage.

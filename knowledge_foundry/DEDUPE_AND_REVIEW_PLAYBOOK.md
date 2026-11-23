@@ -116,3 +116,39 @@ uv run python scripts/knowledge_merge.py --commit
 - Inserts validated entries into SQLite table `world_library` within a single atomic transaction.
 - Updates embedding vector cache `.cache/knowledge_embeddings.npz`.
 - Moves merged JSON packs into `data/knowledge/_merged_archive/<timestamp>_<filename>.json` with a cryptographic audit stamp, guaranteeing they are never imported twice.
+
+---
+
+## 5. Celestial Lore Harvester (`scripts/celestial_ingest.py`)
+
+For distilling raw external texts, lore notebooks, or historical chronicles into compliant Knowledge Foundry packs, use the automated ingest tool:
+
+```bash
+# Ingest raw text using local LLM acceleration
+uv run python scripts/celestial_ingest.py \
+  --input lore_notes.txt \
+  --subject craft_and_metallurgy \
+  --output data/knowledge/staged/dwarven_metallurgy.json \
+  --use-llm \
+  --llm-url http://127.0.0.1:8080/v1 \
+  --max-entries 15 \
+  --era-tier 2 \
+  --author "Master Blacksmith Thrain"
+```
+
+### 5.1 CLI Arguments Reference
+| Argument | Flag | Type | Description |
+| :--- | :--- | :--- | :--- |
+| `--input` | `-i` | `Path` (Required) | Path to raw text or markdown lore document. |
+| `--subject` | `-s` | `str` (Required) | One of 10 canonical subjects: `tactics_and_warfare`, `craft_and_metallurgy`, `architecture_and_engineering`, `agriculture_and_botany`, `medicine_and_biology`, `economics_and_trade`, `law_and_governance`, `philosophy_and_culture`, `natural_history_and_geography`, `divine_theology_and_history`. |
+| `--output` | `-o` | `Path` (Optional) | Output JSON pack path (defaults to `data/knowledge/staged/<pack_name>.json`). |
+| `--use-llm` | | `bool` | Enables extraction and archaic fantasy rephrasing via local `llama.cpp`. |
+| `--llm-url` | | `str` | Local LLM endpoint (default `http://127.0.0.1:8080/v1`). |
+| `--max-entries` | | `int` | Maximum entries to generate in this pack (1..30, default: 15). |
+| `--era-tier` | | `int` | In-world technological/cultural era tier (1..5, default: 1). |
+| `--author` | | `str` | In-world author attribution (default: `"Celestial Scribe"`). |
+
+### 5.2 Automatic Transformations & Anachronism Sanitization
+- **Strict Diegetic Phrasing:** The tool automatically strips modern terminology and flags anachronisms (e.g. replacing modern energy concepts with *galvanic currents* or *primordial ether*).
+- **Mechanical Effects Assignment:** Generates subject-aligned stat modifiers (e.g., `craft_speed_bonus`, `winter_hardiness`) bounded by the `WorldGoddessCritic` validation rules.
+- **Embedded Deduplication Check:** Before writing the JSON pack, `celestial_ingest.py` runs an in-memory pass through `DeduplicationEngine` to ensure the generated entries do not collide with existing `world_library` records.
