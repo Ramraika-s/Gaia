@@ -257,7 +257,13 @@ CREATE TABLE IF NOT EXISTS world_library (
     skill_bonus REAL NOT NULL,
     is_scripture INTEGER NOT NULL DEFAULT 0,
     read_count INTEGER NOT NULL DEFAULT 0,
-    created_tick INTEGER NOT NULL
+    created_tick INTEGER NOT NULL,
+    subject TEXT,
+    section TEXT,
+    fact_key TEXT,
+    tags_json TEXT,
+    mechanical_effects_json TEXT,
+    author_type TEXT DEFAULT 'MORTAL'
 );
 
 CREATE TABLE IF NOT EXISTS library_council_elders (
@@ -374,6 +380,21 @@ def init_db(db_path: str | Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(p) as conn:
         conn.executescript(DDL_SCHEMA)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(world_library);")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        new_cols = [
+            ("subject", "TEXT"),
+            ("section", "TEXT"),
+            ("fact_key", "TEXT"),
+            ("tags_json", "TEXT"),
+            ("mechanical_effects_json", "TEXT"),
+            ("author_type", "TEXT DEFAULT 'MORTAL'"),
+        ]
+        for col_name, col_type in new_cols:
+            if col_name not in existing_cols:
+                cursor.execute(f"ALTER TABLE world_library ADD COLUMN {col_name} {col_type};")
+        conn.commit()
 
 
 def execute_daily_commit(

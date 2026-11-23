@@ -8,10 +8,13 @@ Follows Two-Book Governance Option B Split Write Authority specification.
 from __future__ import annotations
 
 import json
+import re
 import uuid
+from pathlib import Path
 from typing import Any, Literal
 
 from sim_core.config import TICKS_PER_GAME_DAY
+from sim_core.knowledge.schema import KnowledgeEntry
 from sim_core.schemas import (
     DeitySlot,
     DivineCodexEntry,
@@ -21,7 +24,7 @@ from sim_core.schemas import (
 )
 
 OBJECTION_WINDOW_TICKS = TICKS_PER_GAME_DAY  # 1 game day
-EXPIRY_TICKS = 30 * TICKS_PER_GAME_DAY       # 30 game days
+EXPIRY_TICKS = 30 * TICKS_PER_GAME_DAY  # 30 game days
 
 
 class TwoBookGovernanceEngine:
@@ -35,7 +38,7 @@ class TwoBookGovernanceEngine:
 
     def __init__(self):
         # World Library storage
-        self.library_entries: dict[str, WorldLibraryEntry] = {}
+        self.library_entries: dict[str, WorldLibraryEntry | KnowledgeEntry] = {}
         self.library_proposals: dict[str, LibraryProposalRecord] = {}
 
         # Divine Codex storage
@@ -97,6 +100,15 @@ class TwoBookGovernanceEngine:
         action: Literal["CREATE", "EDIT", "SUPERSEDE"] = "CREATE",
         target_entry_id: str | None = None,
         is_scripture: bool = False,
+        body: str | None = None,
+        subject: str | None = None,
+        section: str | None = None,
+        fact_key: str | None = None,
+        tags: list[str] | None = None,
+        mechanical_effects: dict[str, float] | None = None,
+        author_type: Literal["DIVINE", "MORTAL", "SYSTEM", "UNKNOWN"] = "MORTAL",
+        supersedes: list[str] | None = None,
+        distinct_from: list[str] | None = None,
     ) -> tuple[bool, str, LibraryProposalRecord | None]:
         """Mortal drafts a World Library change proposal."""
         if not is_scripture and author_proficiency < 0.70:
@@ -119,9 +131,160 @@ class TwoBookGovernanceEngine:
             first_approval_tick=None,
             status="OPEN",
             created_tick=current_tick,
+            body=body or summary,
+            subject=subject,
+            section=section,
+            fact_key=fact_key,
+            tags=tags or [],
+            mechanical_effects=mechanical_effects or {},
+            author_type=author_type,
+            supersedes=supersedes or [],
+            distinct_from=distinct_from or [],
         )
         self.library_proposals[proposal_id] = proposal
         return True, "PROPOSAL_DRAFTED", proposal
+
+    def submit_mortal_book_petition(
+        self,
+        author_id: str,
+        subject: str,
+        topic: str,
+        title: str,
+        summary: str,
+        body: str = "",
+        target_section: str = "general",
+        fact_key: str | None = None,
+        tags: list[str] | None = None,
+        mechanical_effects: dict[str, float] | None = None,
+        author_proficiency: float = 0.80,
+        current_tick: int = 0,
+        supersedes: list[str] | None = None,
+        distinct_from: list[str] | None = None,
+    ) -> tuple[bool, str, LibraryProposalRecord | None]:
+        """
+        Submits a mortal book petition through 3-Stage deduplication check first.
+        Rejects duplicate petitions automatically before wasting Elder/Daughter votes.
+        Routes valid novel entries to OPEN proposal status for the governance pipeline.
+        """
+        from sim_core.knowledge.dedupe import audit_single_entry
+
+        if not fact_key:
+            clean_sub = re.sub(r"[^a-z0-9_]+", "_", subject.lower()).strip("_")
+            clean_top = re.sub(r"[^a-z0-9_]+", "_", topic.lower()).strip("_")
+            clean_tit = re.sub(r"[^a-z0-9_]+", "_", title.lower()).strip("_")
+            fact_key = f"{clean_sub or 'general'}.{clean_top or 'topic'}.{clean_tit or 'concept'}"
+
+        entry_id = f"mortal_{author_id}_{uuid.uuid4().hex[:6]}"
+        entry_dict = {
+            "entry_id": entry_id,
+            "subject": subject,
+            "target_section": target_section,
+            "fact_key": fact_key,
+            "title": title,
+            "summary": summary,
+            "body": body or summary,
+            "author": author_id,
+            "author_type": "MORTAL",
+            "era_tier": 1,
+            "tags": tags or ["mortal_petition"],
+            "prerequisites": [],
+            "mechanical_effects": mechanical_effects or {},
+            "supersedes": supersedes or [],
+            "distinct_from": distinct_from or [],
+        }
+
+        # 3-Stage Deduplication against existing World Library entries
+        is_valid, reason, _ = audit_single_entry(entry_dict, list(self.library_entries.values()))
+        if not is_valid:
+            return False, f"REJECTED_DUPLICATE: {reason}", None
+
+        # Novel entry -> draft proposal
+        ok, msg, prop = self.draft_mortal_proposal(
+            author_id=author_id,
+            topic=topic,
+            title=title,
+            summary=summary,
+            author_proficiency=author_proficiency,
+            current_tick=current_tick,
+            action="CREATE",
+            body=body or summary,
+            subject=subject,
+            section=target_section,
+            fact_key=fact_key,
+            tags=tags or ["mortal_petition"],
+            mechanical_effects=mechanical_effects or {},
+            author_type="MORTAL",
+            supersedes=supersedes or [],
+            distinct_from=distinct_from or [],
+        )
+        if not ok:
+            return False, msg, None
+
+        return True, "PETITION_ACCEPTED_FOR_VOTING", prop
+
+    def _commit_entry_from_proposal(
+        self,
+        prop: LibraryProposalRecord,
+        current_tick: int,
+    ) -> WorldLibraryEntry:
+        """Commits approved proposal to World Library in RAM and exports mortal book."""
+        entry_id = prop.target_entry_id or f"entry_{uuid.uuid4().hex[:8]}"
+        entry = WorldLibraryEntry(
+            entry_id=entry_id,
+            topic=prop.topic,
+            title=prop.title,
+            summary=prop.summary,
+            author_id=prop.author_id,
+            author_proficiency=prop.author_proficiency,
+            created_tick=current_tick,
+            body=prop.body or prop.summary,
+            subject=prop.subject or prop.topic,
+            section=prop.section or "general",
+            fact_key=prop.fact_key or f"{prop.subject or 'general'}.topic.{entry_id}",
+            tags=prop.tags,
+            mechanical_effects=prop.mechanical_effects,
+            author_type=prop.author_type,
+            supersedes=prop.supersedes,
+            distinct_from=prop.distinct_from,
+        )
+        self.library_entries[entry_id] = entry
+        self._export_mortal_authored_entry(entry)
+        return entry
+
+    def _export_mortal_authored_entry(self, entry: WorldLibraryEntry) -> None:
+        """Exports approved mortal-authored books to data/knowledge/_mortal_authored/."""
+        if entry.author_type != "MORTAL":
+            return
+        mortal_dir = Path("data/knowledge/_mortal_authored")
+        mortal_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"scribe_{entry.author_id}_{entry.entry_id}.json"
+        pack_data = {
+            "pack_id": f"mortal_pack_{entry.entry_id}",
+            "entries": [
+                {
+                    "entry_id": entry.entry_id,
+                    "subject": entry.subject or "law_and_governance",
+                    "target_section": entry.section or "general",
+                    "fact_key": (
+                        entry.fact_key
+                        or f"{entry.subject or 'law_and_governance'}.topic.{entry.entry_id}"
+                    ),
+                    "title": entry.title,
+                    "summary": entry.summary,
+                    "body": entry.body or entry.summary,
+                    "author": entry.author_id,
+                    "author_type": "MORTAL",
+                    "era_tier": 1,
+                    "tags": entry.tags or ["mortal_petition"],
+                    "prerequisites": [],
+                    "mechanical_effects": entry.mechanical_effects,
+                    "supersedes": entry.supersedes,
+                    "distinct_from": entry.distinct_from,
+                }
+            ],
+        }
+        with open(mortal_dir / filename, "w", encoding="utf-8") as f:
+            json.dump(pack_data, f, indent=2)
 
     def cast_elder_vote(
         self,
@@ -224,17 +387,7 @@ class TwoBookGovernanceEngine:
                 else:
                     prop.status = "APPROVED"
                     # Commit to World Library
-                    entry_id = prop.target_entry_id or f"entry_{uuid.uuid4().hex[:8]}"
-                    entry = WorldLibraryEntry(
-                        entry_id=entry_id,
-                        topic=prop.topic,
-                        title=prop.title,
-                        summary=prop.summary,
-                        author_id=prop.author_id,
-                        author_proficiency=prop.author_proficiency,
-                        created_tick=current_tick,
-                    )
-                    self.library_entries[entry_id] = entry
+                    self._commit_entry_from_proposal(prop, current_tick)
                     return "APPROVED_AND_COMMITTED"
 
         return prop.status
@@ -272,17 +425,7 @@ class TwoBookGovernanceEngine:
         if approved:
             prop.status = "APPROVED"
             prop.appeal_ruling = "UPHELD"
-            entry_id = prop.target_entry_id or f"entry_{uuid.uuid4().hex[:8]}"
-            entry = WorldLibraryEntry(
-                entry_id=entry_id,
-                topic=prop.topic,
-                title=prop.title,
-                summary=prop.summary,
-                author_id=prop.author_id,
-                author_proficiency=prop.author_proficiency,
-                created_tick=current_tick,
-            )
-            self.library_entries[entry_id] = entry
+            self._commit_entry_from_proposal(prop, current_tick)
             return True, "APPEAL_UPHELD_AND_COMMITTED"
         else:
             prop.status = "REJECTED"
@@ -306,17 +449,7 @@ class TwoBookGovernanceEngine:
         if approved:
             prop.status = "APPROVED"
             prop.appeal_ruling = "UPHELD"
-            entry_id = prop.target_entry_id or f"entry_{uuid.uuid4().hex[:8]}"
-            entry = WorldLibraryEntry(
-                entry_id=entry_id,
-                topic=prop.topic,
-                title=prop.title,
-                summary=prop.summary,
-                author_id=prop.author_id,
-                author_proficiency=prop.author_proficiency,
-                created_tick=current_tick,
-            )
-            self.library_entries[entry_id] = entry
+            self._commit_entry_from_proposal(prop, current_tick)
             return True, "GOD_APPEAL_UPHELD_AND_COMMITTED"
         else:
             prop.status = "REJECTED"
@@ -368,14 +501,24 @@ class TwoBookGovernanceEngine:
         current_tick: int,
     ) -> tuple[bool, str, DivineCodexEntry | None]:
         """World Goddess + >= 3/5 Daughters may commit non-mechanical text decrees directly."""
-        valid_daughters = {"gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"}
-        unique_approvals = [d for d in daughter_approvals if d in valid_daughters]
+        valid_daughters: set[DeitySlot] = {
+            "gm_human",
+            "gm_elf",
+            "gm_dragon",
+            "gm_beasthuman",
+            "gm_demon",
+        }
+        unique_approvals: list[DeitySlot] = [d for d in daughter_approvals if d in valid_daughters]
 
         if len(unique_approvals) < 3:
-            return False, (
-                f"REJECTED: Non-mechanical decrees require World Goddess + >= 3/5 Daughters, "
-                f"got {len(unique_approvals)}"
-            ), None
+            return (
+                False,
+                (
+                    f"REJECTED: Non-mechanical decrees require World Goddess + >= 3/5 Daughters, "
+                    f"got {len(unique_approvals)}"
+                ),
+                None,
+            )
 
         entry_id = f"codex_{uuid.uuid4().hex[:8]}"
         entry = DivineCodexEntry(
@@ -416,10 +559,14 @@ class TwoBookGovernanceEngine:
             # Daughters must be 5/5 unanimous
             all_sponsors = set(co_sponsors) | {proposer_slot}
             if not valid_daughters.issubset(all_sponsors):
-                return False, (
-                    "REJECTED: Parameter override proposals from Daughters require "
-                    f"all 5 Daughters unanimously, got {len(all_sponsors)}/5"
-                ), None
+                return (
+                    False,
+                    (
+                        "REJECTED: Parameter override proposals from Daughters require "
+                        f"all 5 Daughters unanimously, got {len(all_sponsors)}/5"
+                    ),
+                    None,
+                )
         else:
             return False, "REJECTED: only World Goddess or 5/5 Daughters may submit proposals", None
 
@@ -490,4 +637,3 @@ class TwoBookGovernanceEngine:
         prop.status = "REJECTED"
         prop.resolved_tick = current_tick
         return True, "PROPOSAL_REJECTED_BY_GOD", prop
-

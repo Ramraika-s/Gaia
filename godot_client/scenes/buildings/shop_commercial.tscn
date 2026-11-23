@@ -1,0 +1,102 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/buildings/village/roof_round_tiles_6x6.gltf" id="1_roof"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_timber"]
+albedo_color = Color(0.55, 0.42, 0.32, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_counter"]
+albedo_color = Color(0.38, 0.28, 0.2, 1)
+roughness = 0.6
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.48, 0.48, 0.5, 1)
+roughness = 0.7
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(8, 0.3, 6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+material = SubResource("StandardMaterial3D_floor")
+size = Vector3(8, 0.3, 6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_backwall"]
+size = Vector3(8, 3.8, 0.4)
+
+[sub_resource type="BoxMesh" id="BoxMesh_backwall"]
+material = SubResource("StandardMaterial3D_timber")
+size = Vector3(8, 3.8, 0.4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_sidewall"]
+size = Vector3(0.4, 3.8, 6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_sidewall"]
+material = SubResource("StandardMaterial3D_timber")
+size = Vector3(0.4, 3.8, 6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_counter"]
+size = Vector3(3.5, 1.1, 0.8)
+
+[sub_resource type="BoxMesh" id="BoxMesh_counter"]
+material = SubResource("StandardMaterial3D_counter")
+size = Vector3(3.5, 1.1, 0.8)
+
+[node name="ShopCommercial" type="Node3D"]
+
+[node name="Floor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_floor")
+
+[node name="BackWall" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.05, -2.8)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BackWall"]
+shape = SubResource("BoxShape3D_backwall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="BackWall"]
+mesh = SubResource("BoxMesh_backwall")
+
+[node name="WestWall" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 2.05, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WestWall"]
+shape = SubResource("BoxShape3D_sidewall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="WestWall"]
+mesh = SubResource("BoxMesh_sidewall")
+
+[node name="EastWall" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.8, 2.05, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="EastWall"]
+shape = SubResource("BoxShape3D_sidewall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="EastWall"]
+mesh = SubResource("BoxMesh_sidewall")
+
+[node name="ShopCounter" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.8, 0.7, 2.5)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ShopCounter"]
+shape = SubResource("BoxShape3D_counter")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="ShopCounter"]
+mesh = SubResource("BoxMesh_counter")
+
+[node name="RoofInstance" parent="." instance=ExtResource("1_roof")]
+transform = Transform3D(1.1, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 0, 3.8, 0)
+
+[node name="PropertyPlaque" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.4, 3.2)
+billboard = 1
+font_size = 32
+modulate = Color(1, 0.9, 0.45, 1)
+outline_size = 6
+outline_modulate = Color(0.1, 0.1, 0.1, 0.9)
+text = "COMMERCIAL STALL"

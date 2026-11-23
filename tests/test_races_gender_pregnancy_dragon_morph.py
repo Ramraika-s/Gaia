@@ -10,20 +10,20 @@ Phase 3A Mandatory Acceptance Tests:
 import random
 
 from sim_core.lifecycle import LifecycleManager
-from sim_core.races import RACE_REGISTRY
+from sim_core.races import BeasthumanSubLineage, get_race_profile
 from sim_core.schemas import AgentRecord as AgentState
-from sim_core.schemas import Vec3
+from sim_core.schemas import Gender, RaceId, Vec3
 from sim_core.society.morality import MoralityEngine
 from sim_core.society.rumors import RumorNetwork
 
 
 def _create_adult(
     agent_id: str,
-    gender: str,
-    race: str,
-    sub_lineage: str | None = None,
+    gender: Gender,
+    race: RaceId,
+    sub_lineage: BeasthumanSubLineage | None = None,
 ) -> AgentState:
-    profile = RACE_REGISTRY[race]
+    profile = get_race_profile(race, sub_lineage)
     return AgentState(
         agent_id=agent_id,
         slot_idx=0,
@@ -53,7 +53,7 @@ def test_cross_species_1000_pairings_empirical_conception_and_survival():
     - Offspring birth survival converges to ~60%
     - Stillbirths log BIRTH_COMPLICATION with zero child allocated
     """
-    pairings = [
+    pairings: list[tuple[RaceId, RaceId]] = [
         ("HUMAN", "ELF"),
         ("ELF", "BEASTHUMAN"),
         ("BEASTHUMAN", "DRAGON"),
@@ -82,7 +82,7 @@ def test_cross_species_1000_pairings_empirical_conception_and_survival():
         if success:
             conceptions += 1
             # Verify gestation matches mother's race profile
-            expected_days = RACE_REGISTRY[race_mother].gestation_days
+            expected_days = get_race_profile(race_mother).gestation_days
             assert meta["gestation_days"] == expected_days, (
                 f"Gestation days {meta['gestation_days']} does not match mother's {expected_days}"
             )
@@ -123,9 +123,7 @@ def test_cross_species_1000_pairings_empirical_conception_and_survival():
     assert 0.46 <= conception_rate <= 0.54, (
         f"Conception rate {conception_rate:.3f} outside [0.46, 0.54]"
     )
-    assert 0.55 <= survival_rate <= 0.65, (
-        f"Birth survival {survival_rate:.3f} outside [0.55, 0.65]"
-    )
+    assert 0.55 <= survival_rate <= 0.65, f"Birth survival {survival_rate:.3f} outside [0.55, 0.65]"
     assert stillbirths + survivals == conceptions
 
 
@@ -271,7 +269,7 @@ def test_demon_race_reproduction_temperament_and_dragon_deterrence():
         dampened toward Dragons by dragon_deterrence_bias.
       - Elevated gm_demon reverence imprinted at birth (godmother_affinities['gm_demon'] >= 0.35).
     """
-    profile = RACE_REGISTRY["DEMON"]
+    profile = get_race_profile("DEMON")
     assert profile.lifespan_multiplier == 2.8
     assert profile.gestation_days == 4.0
     assert profile.base_max_health == 120.0
@@ -374,4 +372,3 @@ def test_demon_race_reproduction_temperament_and_dragon_deterrence():
     assert friction_dragon < friction_human, (
         "Dragon deterrence must dampen aggression toward Dragons"
     )
-

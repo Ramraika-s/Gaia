@@ -13,13 +13,13 @@ from sim_core.divine.hierarchy import DivineHierarchyManager
 from sim_core.divine.sister_council import SisterCouncilEngine
 from sim_core.lifecycle import LifecycleManager
 from sim_core.schemas import AgentRecord as AgentState
-from sim_core.schemas import Vec3
+from sim_core.schemas import RaceId, Vec3
 
 
 def _create_child(
     agent_id: str,
-    dominant_race: str,
-    secondary_race: str,
+    dominant_race: RaceId,
+    secondary_race: RaceId,
     age_days: float = 1.0,
 ) -> AgentState:
     return AgentState(
@@ -74,9 +74,7 @@ def test_mixed_race_child_age10_patronage_choice_and_tie_break():
     child_tie = _create_child("tie_1", "HUMAN", "ELF", age_days=3.4)
     child_tie.godmother_affinities = {"gm_human": 0.50, "gm_elf": 0.50}
     # World Goddess decrees gm_elf for forest settlement balance
-    res_tie = LifecycleManager.resolve_age10_patronage(
-        child_tie, world_goddess_decision="gm_elf"
-    )
+    res_tie = LifecycleManager.resolve_age10_patronage(child_tie, world_goddess_decision="gm_elf")
     assert "WORLD_GODDESS_TIE_BREAK_DECREE" in res_tie
     assert child_tie.patron_godmother_slot == "gm_elf"
 
@@ -112,6 +110,7 @@ def test_non_aggression_covenant_and_mediation():
         tick=100,
     )
     assert mediation_msg.topic == "COVENANT_BREACH"
+    assert mediation_msg.resolution is not None
     assert "COVENANT_REBUKE_ISSUED" in mediation_msg.resolution
     # Aggressor frozen for 1 Game Day (10,800 ticks)
     assert human_mother.intervention_cooldown_until_tick == 100 + 10800
@@ -134,6 +133,7 @@ def test_divine_truce_blocks_wartime_ward_defenders():
         tick=200,
     )
     assert accepted is True
+    assert msg.resolution is not None
     assert "DIVINE_TRUCE_ESTABLISHED" in msg.resolution
 
     human_mother = hierarchy.get_deity("gm_human")
@@ -181,6 +181,7 @@ def test_demon_god_mother_hierarchy_and_council():
         tick=500,
     )
     assert accepted is True
+    assert msg.resolution is not None
     assert "DIVINE_TRUCE_ESTABLISHED" in msg.resolution
 
     dragon_mother = hierarchy.get_deity("gm_dragon")
@@ -222,9 +223,6 @@ def test_demon_god_mother_hierarchy_and_council():
     # Age 10 exact tie escalates to World Goddess decree
     child_tie = _create_child("demon_hybrid_tie", "DEMON", "HUMAN", age_days=10.0)
     child_tie.godmother_affinities = {"gm_demon": 0.50, "gm_human": 0.50}
-    res_tie = LifecycleManager.resolve_age10_patronage(
-        child_tie, world_goddess_decision="gm_demon"
-    )
+    res_tie = LifecycleManager.resolve_age10_patronage(child_tie, world_goddess_decision="gm_demon")
     assert "WORLD_GODDESS_TIE_BREAK_DECREE" in res_tie
     assert child_tie.patron_godmother_slot == "gm_demon"
-

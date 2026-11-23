@@ -267,8 +267,19 @@ def test_sqlite_atomic_commit_full_rollback_on_error(test_db_path: Path):
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             (
-                "set_001", "Solaria", "VILLAGE", "ELECTED", "agt_01",
-                "{}", "[]", 100.0, 0.05, "{}", "[]", "[]", 1,
+                "set_001",
+                "Solaria",
+                "VILLAGE",
+                "ELECTED",
+                "agt_01",
+                "{}",
+                "[]",
+                100.0,
+                0.05,
+                "{}",
+                "[]",
+                "[]",
+                1,
             ),
         ),
         (
@@ -302,10 +313,29 @@ def test_duckdb_read_only_attach_analytics(test_db_path: Path):
             "traits_json, skills_json, tradition_ids_json, updated_tick) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "agt_01", 0, "Eldrin", "Leaf", "BOY", "ELF",
-                "{}", "[0,0,0]", "ADULT", 100, 95.0, 95.0,
-                100.0, 100.0, 50.0, 700.0, "[]", 1, "{}",
-                "{}", "{}", "[]", 100,
+                "agt_01",
+                0,
+                "Eldrin",
+                "Leaf",
+                "BOY",
+                "ELF",
+                "{}",
+                "[0,0,0]",
+                "ADULT",
+                100,
+                95.0,
+                95.0,
+                100.0,
+                100.0,
+                50.0,
+                700.0,
+                "[]",
+                1,
+                "{}",
+                "{}",
+                "{}",
+                "[]",
+                100,
             ),
         ),
         (
@@ -485,4 +515,3 @@ def test_five_daughter_voting_math_and_demon_rbac():
     )
     v_demon_same = critic.evaluate(prop_demon_same)
     assert v_demon_same.status == "FAILURE"
-

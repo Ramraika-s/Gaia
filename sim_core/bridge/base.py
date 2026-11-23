@@ -43,19 +43,35 @@ class WorldAdapter(ABC):
         pass
 
     @abstractmethod
+    def sync_deities(self, deities: list[dict[str, Any]]) -> None:
+        """Syncs the 6 Deities' live coordinates and state over WebSocket."""
+        pass
+
+    @abstractmethod
     def sync_weather_time(
         self,
         day: int,
         time_of_day: float,
         season_progress: float,
         weather: str = "CLEAR",
+        weather_details: dict[str, Any] | None = None,
     ) -> None:
-        """Syncs day, Sky3D time-of-day, and season shader progress."""
+        """Syncs day, Sky3D time-of-day, season shader progress, and regional weather details."""
         pass
 
     @abstractmethod
     def emit_event(self, event_type: str, payload: dict[str, Any]) -> None:
         """Dispatches a discrete JSON event to Godot (e.g. ALTAR_BEACON, SIGN_UPDATE)."""
+        pass
+
+    @abstractmethod
+    def broadcast_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        """Broadcasts a discrete JSON event to all connected Godot clients."""
+        pass
+
+    @abstractmethod
+    def sync_building_update(self, building: dict[str, Any] | Any) -> None:
+        """Broadcasts incremental BUILDING_UPDATE event to connected clients."""
         pass
 
     @abstractmethod

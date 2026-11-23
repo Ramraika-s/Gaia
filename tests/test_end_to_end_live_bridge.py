@@ -26,7 +26,7 @@ import websockets
 from sim_core.bridge.godot_ws_bridge import GodotWebSocketBridge
 from sim_core.engine import SimulationEngine
 from sim_core.god_console.cli import RichGodConsole
-from sim_core.schemas import Gender, RaceId, Vec3
+from sim_core.schemas import Gender, RaceId, Vec3, WorldLibraryEntry
 
 
 def get_ephemeral_port() -> int:
@@ -79,7 +79,7 @@ async def test_end_to_end_live_bridge_and_ui_sync(tmp_path: Path) -> None:
             # 2. Handshake & Book State Sync
             await ws.send(json.dumps({"type": "CLIENT_HANDSHAKE", "client_version": "4.7.2"}))
 
-            # Expect HANDSHAKE_ACK and BOOK_STATE_SYNC
+            # Expect HANDSHAKE_ACK, BOOK_STATE_SYNC, and BUILDING_SYNC
             resp1 = json.loads(await ws.recv())
             assert resp1["type"] == "HANDSHAKE_ACK"
             assert resp1["status"] == "CONNECTED"
@@ -89,6 +89,11 @@ async def test_end_to_end_live_bridge_and_ui_sync(tmp_path: Path) -> None:
             assert "library_entries" in resp2
             assert "codex_entries" in resp2
             assert "live_overrides" in resp2
+
+            resp3 = json.loads(await ws.recv())
+            assert resp3["type"] == "BUILDING_SYNC"
+            assert "cities" in resp3
+            assert "buildings" in resp3
 
             # 3. Binary 5-Race Frame Broadcast & Unpacking
             payload = bridge.pack_binary_frame()
@@ -105,12 +110,15 @@ async def test_end_to_end_live_bridge_and_ui_sync(tmp_path: Path) -> None:
             assert race_ids == {0, 1, 2, 3, 4}  # All 5 races present
 
             # 4. Live GOD_LIBRARY_EDIT (Strictly in RAM, zero mid-day SQLite writes)
+            # Emitted by two_book_modal.gd -> ws_bridge_client.gd:send_god_library_edit()
             edit_msg = {
                 "type": "GOD_LIBRARY_EDIT",
                 "topic": "COSMOLOGY",
                 "volume_title": "The Celestial Spheres",
-                "author_id": "GOD",
                 "text_content": "The universe expands through divine harmonic resonance.",
+                "author_id": "GOD",
+                "bypass_god_check": True,
+                "timestamp": 1700000000.0,
             }
             await ws.send(json.dumps(edit_msg))
 
@@ -118,9 +126,18 @@ async def test_end_to_end_live_bridge_and_ui_sync(tmp_path: Path) -> None:
             assert edit_resp["type"] == "GOD_LIBRARY_EDIT_RESPONSE"
             assert edit_resp["status"] == "SUCCESS"
 
+            # Immediate broadcast of BOOK_STATE_SYNC containing the new volume
+            sync_resp = json.loads(await ws.recv())
+            assert sync_resp["type"] == "BOOK_STATE_SYNC"
+            titles = [e.get("title") for e in sync_resp["library_entries"]]
+            assert "The Celestial Spheres" in titles
+
             # Check that entry is immediately in RAM
             entries = engine.governance_engine.library_entries
-            assert any(e.topic == "COSMOLOGY" for e in entries.values())
+            assert any(
+                (e.topic if isinstance(e, WorldLibraryEntry) else e.subject) == "COSMOLOGY"
+                for e in entries.values()
+            )
 
             # Verify zero mid-day disk writes to SQLite
             with sqlite3.connect(db_path) as conn:
@@ -145,16 +162,23 @@ async def test_end_to_end_live_bridge_and_ui_sync(tmp_path: Path) -> None:
             assert prop.status == "PENDING_GOD"
 
             await ws.send(
-                json.dumps({
-                    "type": "GOD_CODEX_APPROVE",
-                    "proposal_id": prop.proposal_id,
-                })
+                json.dumps(
+                    {
+                        "type": "GOD_CODEX_APPROVE",
+                        "proposal_id": prop.proposal_id,
+                        "timestamp": 1700000001.0,
+                    }
+                )
             )
 
             approve_resp = json.loads(await ws.recv())
             assert approve_resp["type"] == "GOD_CODEX_APPROVE_RESPONSE"
             assert approve_resp["status"] == "SUCCESS"
             assert engine.governance_engine.live_engine_overrides["divine_truce_ticks"] == 6000.0
+
+            sync_approve = json.loads(await ws.recv())
+            assert sync_approve["type"] == "BOOK_STATE_SYNC"
+            assert sync_approve["live_overrides"].get("divine_truce_ticks") == 6000.0
 
             # 6. Live GOD_CODEX_REJECT
             success2, _, prop2 = engine.governance_engine.submit_parameter_override_proposal(
@@ -169,16 +193,42 @@ async def test_end_to_end_live_bridge_and_ui_sync(tmp_path: Path) -> None:
             assert success2 and prop2 is not None
 
             await ws.send(
-                json.dumps({
-                    "type": "GOD_CODEX_REJECT",
-                    "proposal_id": prop2.proposal_id,
-                })
+                json.dumps(
+                    {
+                        "type": "GOD_CODEX_REJECT",
+                        "proposal_id": prop2.proposal_id,
+                        "timestamp": 1700000002.0,
+                    }
+                )
             )
 
             reject_resp = json.loads(await ws.recv())
             assert reject_resp["type"] == "GOD_CODEX_REJECT_RESPONSE"
             assert reject_resp["status"] == "SUCCESS"
             assert engine.governance_engine.codex_proposals[prop2.proposal_id].status == "REJECTED"
+
+            sync_reject = json.loads(await ws.recv())
+            assert sync_reject["type"] == "BOOK_STATE_SYNC"
+
+            # 7. Live GOD_CODEX_EDIT (Direct decree & parameter override from modal)
+            codex_edit_msg = {
+                "type": "GOD_CODEX_EDIT",
+                "decree_id": "DECREE_CELESTIAL_ORDER",
+                "text_decree": "All lineages shall maintain cosmic harmony.",
+                "parameter_key": "NON_AGGRESSION_COVENANT",
+                "parameter_val": "true",
+                "bypass_god_check": True,
+                "timestamp": 1700000003.0,
+            }
+            await ws.send(json.dumps(codex_edit_msg))
+            codex_resp = json.loads(await ws.recv())
+            assert codex_resp["type"] == "GOD_CODEX_EDIT_RESPONSE"
+            assert codex_resp["status"] == "SUCCESS"
+
+            sync_codex = json.loads(await ws.recv())
+            assert sync_codex["type"] == "BOOK_STATE_SYNC"
+            decrees = [e.get("title") for e in sync_codex["codex_entries"]]
+            assert "DECREE_CELESTIAL_ORDER" in decrees
 
             # 7. In-Game God Console Raw Commands (GOD_COMMAND)
             await ws.send(json.dumps({"type": "GOD_COMMAND", "raw_command": "status"}))

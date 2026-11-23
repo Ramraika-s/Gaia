@@ -1,0 +1,260 @@
+"""
+tests/test_five_cities_and_building_sync.py
+Verification suite for Gaia v4.0 Sprint 3:
+- 5 Equidistant Gated Ring 1 Racial Cities at r = 1,150m (72° spacing)
+- God-Mother Palaces, 4 Gates per city, CITY_GUARD patrols, modular seed housing & shops
+- Matching deeded 16x16m parcels in PropertyManager
+- Ring 2 Frontier Wilderness (1,500m - 3,300m) with ZERO pre-built buildings
+- City demographics predominantly (>= 75%) native race
+- WebSocket BUILDING_SYNC on handshake and live BUILDING_UPDATE broadcasts on property purchase
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import socket
+
+import pytest
+import websockets
+
+from sim_core.bridge.godot_ws_bridge import GodotWebSocketBridge
+from sim_core.engine import SimulationEngine
+from sim_core.schemas import AgentRecord, Vec3
+from sim_core.world.city_layout import RING_1_CITY_SPECS, CityLayoutEngine
+
+
+def get_free_port() -> int:
+    """Finds an available TCP port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def test_five_cities_geometry_palaces_and_gates(tmp_path):
+    """Verifies all 5 cities exist at r=1,150m with 72° spacing, palaces, 4 gates, and deeds."""
+    engine = SimulationEngine(
+        db_path=tmp_path / "test_cities.db",
+        checkpoints_dir=tmp_path / "checkpoints",
+        god_ledger_dir=tmp_path / "god_ledger",
+        headless=True,
+    )
+    city_mgr = engine.city_layout
+
+    # 1. Verify 5 cities exist
+    assert len(city_mgr.cities) == 5
+    expected_cities = {"sylvanor", "aurelia", "fenris_hold", "malakor", "drakonis_spire"}
+    assert set(city_mgr.cities.keys()) == expected_cities
+
+    for cid, spec in RING_1_CITY_SPECS.items():
+        city = city_mgr.cities[cid]
+        assert city.name == spec["name"]
+        assert city.native_race == spec["native_race"]
+        assert city.racial_style == spec["racial_style"]
+        assert city.godmother_slot == spec["godmother_slot"]
+        assert city.curtain_wall_radius == 240.0
+
+        # Radius check: r ~= 1,150m
+        dist_origin = math.hypot(city.center_x, city.center_z)
+        assert abs(dist_origin - 1150.0) < 5.0, f"City {cid} dist {dist_origin} not ~1150m"
+
+        # Check palace
+        palace_id = f"bld_{cid}_palace"
+        assert palace_id in city_mgr.buildings
+        palace = city_mgr.buildings[palace_id]
+        assert palace.building_type == "GODMOTHER_PALACE"
+        assert palace.racial_style == city.racial_style
+        assert palace.footprint_radius >= 25.0
+        assert not palace.for_sale
+
+        # Verify deed in property_mgr
+        parcel_id = f"{palace.parcel_x}_{palace.parcel_z}"
+        assert parcel_id in engine.property_mgr.parcels
+        parcel = engine.property_mgr.parcels[parcel_id]
+        assert parcel.settlement_id == cid
+
+        # Check 4 gates
+        gate_suffixes = ["gate_imperial", "gate_right", "gate_outer", "gate_left"]
+        for g_suf in gate_suffixes:
+            gid = f"bld_{cid}_{g_suf}"
+            assert gid in city_mgr.buildings
+            gate = city_mgr.buildings[gid]
+            assert gate.building_type == "CITY_GATE"
+            dist_to_center = math.hypot(gate.x - city.center_x, gate.z - city.center_z)
+            assert abs(dist_to_center - 240.0) < 2.0
+
+        # Check seed buildings (18 to 24 seed housing/shops)
+        seed_buildings = [
+            b
+            for b in city_mgr.buildings.values()
+            if b.city_id == cid and b.building_type not in ("GODMOTHER_PALACE", "CITY_GATE")
+        ]
+        assert 18 <= len(seed_buildings) <= 24
+
+        # Archetypes present
+        btypes = {b.building_type for b in seed_buildings}
+        assert "HOUSE_T1_COTTAGE" in btypes
+        assert "HOUSE_T2_TOWNHOUSE" in btypes
+        assert "HOUSE_T3_MANOR" in btypes
+        assert any("SHOP_" in bt for bt in btypes)
+
+        # Housing market active: ~35% for sale, ~65% owned
+        for_sale_count = sum(1 for b in seed_buildings if b.for_sale)
+        owned_count = sum(1 for b in seed_buildings if not b.for_sale)
+        assert for_sale_count >= 5
+        assert owned_count >= 10
+
+
+def test_ring_2_frontier_wilderness_invariant(tmp_path):
+    """Asserts Ring 2 (1,500m - 3,300m) is completely pristine with zero pre-built buildings."""
+    layout = CityLayoutEngine()
+    passed, msg = layout.verify_ring_2_wilderness()
+    assert passed, msg
+
+    # Every single building must be either in Acropolis (<=360m) or inside city footprint (<=280m)
+    for b in layout.buildings.values():
+        dist_origin = math.hypot(b.x, b.z)
+        assert not (1500.0 <= dist_origin <= 3300.0)
+
+
+def test_city_guard_patrols_and_gate_watches(tmp_path):
+    """Verifies city guard garrisons are spawned and patrol gates/walls."""
+    engine = SimulationEngine(
+        db_path=tmp_path / "test_guards.db",
+        checkpoints_dir=tmp_path / "checkpoints",
+        god_ledger_dir=tmp_path / "god_ledger",
+        headless=True,
+    )
+    city_mgr = engine.city_layout
+
+    # Spawn 10 guards for Sylvanor (ELF)
+    elf_guards = city_mgr.spawn_city_guard_garrison(engine.agents, "sylvanor", count=10)
+    assert len(elf_guards) == 10
+    for g in elf_guards:
+        assert g.role == "CITY_GUARD"
+        assert g.race == "ELF"
+        assert g.alive
+
+    # Step patrol shifts and ensure positions remain valid
+    for t in range(250):
+        city_mgr.step_patrols(t, engine.agents)
+
+    # Position should be alive and within city bounds
+    dist_to_center = math.hypot(
+        elf_guards[0].pos.x - city_mgr.cities["sylvanor"].center_x,
+        elf_guards[0].pos.z - city_mgr.cities["sylvanor"].center_z,
+    )
+    assert 220.0 <= dist_to_center <= 250.0
+
+
+def test_predominant_racial_demographics(tmp_path):
+    """Verifies that each city is populated >= 75% by its native race."""
+    from scripts.launch_gaia import spawn_initial_population
+
+    engine = SimulationEngine(
+        db_path=tmp_path / "test_demo.db",
+        checkpoints_dir=tmp_path / "checkpoints",
+        god_ledger_dir=tmp_path / "god_ledger",
+        headless=True,
+    )
+
+    # Spawn 600 total agents
+    spawn_initial_population(engine, num_agents=600)
+    assert len(engine.agents) >= 500
+
+    # Count demographics per Ring 1 city (agents within 260m of city center)
+    for cid, city in engine.city_layout.cities.items():
+        city_agents = [
+            a
+            for a in engine.agents.values()
+            if a.role != "PALACE_KNIGHT"
+            and math.hypot(a.pos.x - city.center_x, a.pos.z - city.center_z) <= 260.0
+        ]
+        assert len(city_agents) >= 30
+
+        native_count = sum(1 for a in city_agents if a.race == city.native_race)
+        native_pct = (native_count / float(len(city_agents))) * 100.0
+        assert native_pct >= 75.0, f"City {cid} native pct was {native_pct:.1f}%, expected >= 75.0%"
+
+
+@pytest.mark.asyncio
+async def test_websocket_building_sync_and_live_purchase(tmp_path):
+    """
+    Tests that:
+    1. Real WebSocket connection delivers BUILDING_SYNC on CLIENT_HANDSHAKE.
+    2. Buying a house debits credits, changes ownership, updates parcel deed, and
+       broadcasts live BUILDING_UPDATE to clients.
+    """
+    port = get_free_port()
+    engine = SimulationEngine(
+        db_path=tmp_path / "test_ws.db",
+        checkpoints_dir=tmp_path / "checkpoints",
+        god_ledger_dir=tmp_path / "god_ledger",
+        headless=True,
+    )
+    bridge = GodotWebSocketBridge(host="127.0.0.1", port=port, engine=engine)
+    engine.adapter = bridge
+
+    await bridge.start_server_async()
+    try:
+        uri = f"ws://127.0.0.1:{port}"
+        async with websockets.connect(uri) as ws:
+            # Send handshake
+            await ws.send(json.dumps({"type": "CLIENT_HANDSHAKE", "client_version": "4.7.2"}))
+
+            # Expect 1: HANDSHAKE_ACK
+            ack = json.loads(await ws.recv())
+            assert ack["type"] == "HANDSHAKE_ACK"
+
+            # Expect 2: BOOK_STATE_SYNC
+            book_sync = json.loads(await ws.recv())
+            assert book_sync["type"] == "BOOK_STATE_SYNC"
+
+            # Expect 3: BUILDING_SYNC
+            bld_sync = json.loads(await ws.recv())
+            assert bld_sync["type"] == "BUILDING_SYNC"
+            assert len(bld_sync["cities"]) == 5
+            # 5 cities * (1 palace + 4 gates + 20 seeds) = 125 total buildings
+            assert len(bld_sync["buildings"]) >= 100
+
+            # Find a building listed for sale
+            for_sale_bld = next(b for b in engine.city_layout.buildings.values() if b.for_sale)
+            bld_id = for_sale_bld.building_id
+            sale_price = for_sale_bld.sale_price
+
+            # Create a buyer agent with enough credits
+            buyer = AgentRecord(
+                agent_id="buyer_adventurer_01",
+                slot_idx=0,
+                display_name="Elidor Swiftarrow",
+                dynasty_surname="Swiftarrow",
+                gender="BOY",
+                race="ELF",
+                credits=1000.0,
+                pos=Vec3(x=0.0, y=0.0, z=0.0),
+            )
+            engine.agents[buyer.agent_id] = buyer
+
+            # Execute purchase
+            success, msg = engine.buy_building(bld_id, buyer)
+            assert success, msg
+            assert buyer.credits == 1000.0 - sale_price
+            assert not for_sale_bld.for_sale
+            assert for_sale_bld.owner_id == buyer.agent_id
+            assert for_sale_bld.owner_name == buyer.display_name
+
+            # Parcel deed verification
+            parcel_id = f"{for_sale_bld.parcel_x}_{for_sale_bld.parcel_z}"
+            parcel = engine.property_mgr.parcels[parcel_id]
+            assert parcel.owner_id == buyer.agent_id
+            assert parcel.for_sale_price is None
+
+            # Client receives live incremental BUILDING_UPDATE
+            update_frame = json.loads(await ws.recv())
+            assert update_frame["type"] == "BUILDING_UPDATE"
+            assert update_frame["building"]["building_id"] == bld_id
+            assert update_frame["building"]["for_sale"] is False
+            assert update_frame["building"]["owner_id"] == buyer.agent_id
+
+    finally:
+        await bridge.stop_server_async()

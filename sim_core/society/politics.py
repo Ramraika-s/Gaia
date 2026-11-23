@@ -117,8 +117,7 @@ class PoliticalEngine:
         """
         deceased_id = deceased_king.agent_id
         living_children = [
-            a for a in all_agents.values()
-            if a.alive and deceased_id in a.parent_ids
+            a for a in all_agents.values() if a.alive and deceased_id in a.parent_ids
         ]
 
         if living_children:
@@ -134,7 +133,8 @@ class PoliticalEngine:
         if deceased_king.parent_ids:
             parent_set = set(deceased_king.parent_ids)
             living_siblings = [
-                a for a in all_agents.values()
+                a
+                for a in all_agents.values()
                 if a.alive and a.agent_id != deceased_id and parent_set.intersection(a.parent_ids)
             ]
             if living_siblings:
@@ -144,7 +144,8 @@ class PoliticalEngine:
 
         # Succession crisis: pick highest-ambition elder or citizen
         citizens = [
-            a for a in all_agents.values()
+            a
+            for a in all_agents.values()
             if a.alive and a.settlement_id == polity.settlement_id and a.stage in ("ADULT", "ELDER")
         ]
         if citizens:

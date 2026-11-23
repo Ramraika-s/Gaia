@@ -16,6 +16,7 @@ from sim_core.schemas import BankLoanRecord
 
 class EconomyError(Exception):
     """Raised when an economic transfer or bank operation fails."""
+
     pass
 
 
@@ -29,6 +30,14 @@ class WorldBank:
         self.reserve_credits: float = initial_reserve
         self.loans: dict[str, BankLoanRecord] = {}
         self.defaulted_cases: list[dict[str, Any]] = []
+
+    @property
+    def credits(self) -> float:
+        return self.reserve_credits
+
+    @credits.setter
+    def credits(self, value: float) -> None:
+        self.reserve_credits = value
 
     def issue_currency(self, recipient: AgentState | Any, amount: float) -> bool:
         """

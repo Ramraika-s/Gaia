@@ -30,3 +30,6 @@ data/
 # Local OS noise
 .DS_Store
 Thumbs.db
+
+llama.cpp/
+models/

@@ -13,13 +13,16 @@ from typing import Literal
 from sim_core.schemas import TraditionRecord
 
 TraditionTrigger = Literal[
-    "FIRST_DAY_OF_WINTER", "HARVEST_SURPLUS", "ROYAL_DEATH",
-    "MARRIAGE", "WAR_VICTORY", "GOD_SIGHTING"
+    "FIRST_DAY_OF_WINTER",
+    "HARVEST_SURPLUS",
+    "ROYAL_DEATH",
+    "MARRIAGE",
+    "WAR_VICTORY",
+    "GOD_SIGHTING",
 ]
 
 RitualAction = Literal[
-    "GIFT_FOOD_IN_SQUARE", "GATHER_AT_TEMPLE", "SILENT_FAST",
-    "PUBLIC_FEAST", "BUILD_MONUMENT_STEP"
+    "GIFT_FOOD_IN_SQUARE", "GATHER_AT_TEMPLE", "SILENT_FAST", "PUBLIC_FEAST", "BUILD_MONUMENT_STEP"
 ]
 
 

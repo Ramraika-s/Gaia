@@ -173,6 +173,7 @@ def test_rollback_aborted_on_tampered_backup(tmp_path: Path):
 
     # Cleanup test backup
     import shutil
+
     shutil.rmtree(task_backup_dir)
 
 

@@ -16,6 +16,8 @@ extends Node3D
 @onready var two_book_modal: CanvasLayer = $TwoBookModal
 @onready var god_console_overlay: CanvasLayer = $GodConsoleOverlay
 @onready var entity_inspector: CanvasLayer = $EntityInspector
+@onready var cities_manager: Node3D = $CitiesAndBuildingsManager
+@onready var dialogue_modal: CanvasLayer = $DialogueModal
 
 
 func _ready() -> void:
@@ -23,6 +25,7 @@ func _ready() -> void:
 	print("GAIA CIVILIZATION ENGINE: 3D WORLD CLIENT INITIALIZED")
 	print("Renderer: Forward+ (MSAA 2x, 2048px Shadow Atlas)")
 	print("Vertical Slice C: Divine HUD, Two-Book Modals, God Console, Entity Inspector & Live Bridge Sync")
+	print("Sprint 3: 5 Equidistant Gated Cities, God-Mother Palaces & Modular Housing Active")
 	print("============================================================")
 
 	# Wire Vertical Slice C UI interactions
@@ -59,6 +62,9 @@ func _init_offline_preview() -> void:
 	if reality_bubble_manager and reality_bubble_manager.has_method("populate_offline_preview"):
 		reality_bubble_manager.populate_offline_preview()
 
+	if cities_manager and cities_manager.has_method("populate_offline_preview"):
+		cities_manager.populate_offline_preview()
+
 
 func _on_bridge_connected() -> void:
 	print("[+] WebSocket Bridge connected to Python core (ws://127.0.0.1:8765)")
@@ -66,3 +72,60 @@ func _on_bridge_connected() -> void:
 
 func _on_bridge_disconnected() -> void:
 	print("[!] WebSocket Bridge disconnected; maintaining local visual state")
+
+
+func _process(_delta: float) -> void:
+	if not dialogue_modal or dialogue_modal.is_dialogue_open:
+		return
+
+	# If near library lectern, lectern interaction takes priority for [E]
+	if two_book_modal and two_book_modal.get("is_near_lectern") == true:
+		dialogue_modal.clear_interaction_target()
+		return
+
+	# Only check interactions when avatar exists
+	if not god_camera or not god_camera.avatar_body:
+		dialogue_modal.clear_interaction_target()
+		return
+
+	var avatar_pos: Vector3 = god_camera.avatar_body.global_position
+
+	# 1. Check for nearby Deity within 5.5m
+	if divine_npcs and divine_npcs.has_method("get_nearest_deity"):
+		var nearest_deity: Dictionary = divine_npcs.get_nearest_deity(avatar_pos, 5.5)
+		if not nearest_deity.is_empty():
+			dialogue_modal.set_interaction_target(
+				"DEITY",
+				nearest_deity["id"],
+				nearest_deity["name"],
+				nearest_deity["title"],
+				nearest_deity["race"],
+				nearest_deity["mood"]
+			)
+			return
+
+	# 2. Check for nearby Mortal within 5.5m
+	if reality_bubble_manager and reality_bubble_manager.has_method("get_pool"):
+		var pool: Array = reality_bubble_manager.get_pool()
+		var best_mortal: Node3D = null
+		var best_dist_sq: float = 5.5 * 5.5
+
+		for actor in pool:
+			if actor and actor.visible and actor.is_pool_active:
+				var dist_sq: float = actor.global_position.distance_squared_to(avatar_pos)
+				if dist_sq < best_dist_sq:
+					best_dist_sq = dist_sq
+					best_mortal = actor
+
+		if best_mortal:
+			dialogue_modal.set_interaction_target(
+				"MORTAL",
+				best_mortal.agent_id,
+				best_mortal.full_name,
+				best_mortal.role,
+				best_mortal.race,
+				"calm"
+			)
+			return
+
+	dialogue_modal.clear_interaction_target()

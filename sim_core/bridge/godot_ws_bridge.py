@@ -63,13 +63,13 @@ FLOAT_TO_STAGE: Final[dict[int, str]] = {
 }
 
 # Packed flag bits (stored as float32 in slot index 5)
-FLAG_CRYING: Final[int] = 1 << 0       # 1
-FLAG_IS_ORACLE: Final[int] = 1 << 1    # 2
+FLAG_CRYING: Final[int] = 1 << 0  # 1
+FLAG_IS_ORACLE: Final[int] = 1 << 1  # 2
 FLAG_TRUE_DRAGON: Final[int] = 1 << 2  # 4
-FLAG_INJURED: Final[int] = 1 << 3      # 8
-FLAG_ILLNESS: Final[int] = 1 << 4      # 16
-FLAG_IN_COMBAT: Final[int] = 1 << 5    # 32
-FLAG_PRAYING: Final[int] = 1 << 6      # 64
+FLAG_INJURED: Final[int] = 1 << 3  # 8
+FLAG_ILLNESS: Final[int] = 1 << 4  # 16
+FLAG_IN_COMBAT: Final[int] = 1 << 5  # 32
+FLAG_PRAYING: Final[int] = 1 << 6  # 64
 
 
 class GodotWebSocketBridge(WorldAdapter):
@@ -125,7 +125,29 @@ class GodotWebSocketBridge(WorldAdapter):
             "live_overrides": dict(gov.live_engine_overrides),
         }
 
-    # =========================================================================
+    def get_building_sync_payload(self) -> dict[str, Any]:
+        """Packs 5 Ring 1 cities and seed buildings registry."""
+        if self.engine and hasattr(self.engine, "city_layout") and self.engine.city_layout:
+            return self.engine.city_layout.get_building_sync_payload()
+        return {
+            "type": "BUILDING_SYNC",
+            "cities": [],
+            "buildings": [],
+        }
+
+    def get_deity_sync_payload(self) -> dict[str, Any]:
+        """Packs live state of all 6 Deities (World Goddess + 5 God-Mothers)."""
+        if self.engine and hasattr(self.engine, "divine_autonomy") and self.engine.divine_autonomy:
+            sync_records = self.engine.divine_autonomy.get_sync_records()
+            return {
+                "type": "DEITY_SYNC",
+                "deities": [d.model_dump() for d in sync_records],
+            }
+        return {
+            "type": "DEITY_SYNC",
+            "deities": [],
+        }
+
     # Buffer Management & Capacity Slabs
     # =========================================================================
 
@@ -208,28 +230,48 @@ class GodotWebSocketBridge(WorldAdapter):
         """Dispatches BUBBLE_SYNC JSON event for the 60-120 pooled 3D rigs."""
         self.emit_event("BUBBLE_SYNC", {"agents": pooled_agents})
 
+    def sync_deities(self, deities: list[dict[str, Any]] | None = None) -> None:
+        """Dispatches DEITY_SYNC JSON event with all 6 Deities' live coordinates and state."""
+        if deities is None:
+            payload = self.get_deity_sync_payload()
+        else:
+            payload = {"type": "DEITY_SYNC", "deities": deities}
+        self.send_json_broadcast(payload)
+
     def sync_weather_time(
         self,
         day: int,
         time_of_day: float,
         season_progress: float,
         weather: str = "CLEAR",
+        weather_details: dict[str, Any] | None = None,
     ) -> None:
         """Dispatches WORLD_TIME_WEATHER JSON event for Sky3D and global shaders."""
+        payload: dict[str, Any] = {
+            "day": day,
+            "time_of_day": time_of_day,
+            "season_progress": season_progress,
+            "weather": weather,
+        }
+        if weather_details:
+            payload["weather_details"] = weather_details
         self.emit_event(
             "WORLD_TIME_WEATHER",
-            {
-                "day": day,
-                "time_of_day": time_of_day,
-                "season_progress": season_progress,
-                "weather": weather,
-            },
+            payload,
         )
 
     def emit_event(self, event_type: str, payload: dict[str, Any]) -> None:
         """Emits a discrete JSON event to all connected Godot clients."""
         msg = {"type": event_type, **payload}
         self.send_json_broadcast(msg)
+
+    def broadcast_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        """Alias for emit_event."""
+        self.emit_event(event_type, payload)
+
+    def sync_building_update(self, building: dict[str, Any] | Any) -> None:
+        """Broadcasts incremental BUILDING_UPDATE event to connected clients."""
+        self.broadcast_building_update(building)
 
     def broadcast_binary_frame(self, data: bytes) -> None:
         """Sends raw PackedFloat32Array bytes to all connected clients."""
@@ -357,8 +399,17 @@ class GodotWebSocketBridge(WorldAdapter):
                     )
                 )
                 await client.send(json.dumps(self.get_book_state_payload()))
+                await client.send(json.dumps(self.get_building_sync_payload()))
+                if data.get("client") == "GODOT_CLIENT" or data.get("include_deities", False):
+                    await client.send(json.dumps(self.get_deity_sync_payload()))
             elif msg_type == "REQUEST_BOOK_STATE_SYNC":
                 await client.send(json.dumps(self.get_book_state_payload()))
+            elif msg_type == "REQUEST_BUILDING_SYNC":
+                await client.send(json.dumps(self.get_building_sync_payload()))
+            elif msg_type == "REQUEST_DEITY_SYNC":
+                await client.send(json.dumps(self.get_deity_sync_payload()))
+            elif msg_type == "DIALOGUE_REQUEST":
+                await self._handle_dialogue_request(client, data)
             elif msg_type == "GOD_STATE":
                 await self._handle_god_state(client, data)
             elif msg_type == "GOD_LIBRARY_EDIT":
@@ -369,8 +420,11 @@ class GodotWebSocketBridge(WorldAdapter):
                 await self._handle_god_codex_approve(client, data)
             elif msg_type == "GOD_CODEX_REJECT":
                 await self._handle_god_codex_reject(client, data)
+            elif msg_type == "GOD_PALACE_DECISION":
+                await self._handle_god_palace_decision(client, data)
             elif msg_type == "GOD_COMMAND":
                 await self._handle_god_command(client, data)
+
             else:
                 err = ValueError(f"Unknown message type '{msg_type}'")
                 if self.engine:
@@ -417,9 +471,9 @@ class GodotWebSocketBridge(WorldAdapter):
         Zero mid-day SQLite writes.
         """
         topic = data.get("topic", "")
-        volume_title = data.get("volume_title", "Divine Canonical Volume")
+        volume_title = data.get("volume_title") or data.get("title", "Divine Canonical Volume")
         author_id = data.get("author_id", "GOD")
-        text_content = data.get("text_content", "")
+        text_content = data.get("text_content") or data.get("body") or data.get("summary", "")
 
         if not self.engine:
             await client.send(
@@ -467,18 +521,21 @@ class GodotWebSocketBridge(WorldAdapter):
                     "status": verdict.status,
                     "reason": verdict.reason,
                     "topic": topic,
+                    "title": volume_title,
                 }
             )
         )
         if verdict.status == "SUCCESS":
-            self.broadcast_book_state(exclude=client)
+            self.broadcast_book_state(exclude=None)
 
     async def _handle_god_codex_edit(self, client: Any, data: dict[str, Any]) -> None:
         """Direct God decree or live parameter override in RAM."""
-        decree_id = data.get("decree_id", f"decree_{uuid.uuid4().hex[:8]}")
-        text_decree = data.get("text_decree", "")
+        decree_id = data.get("decree_id") or data.get("title", f"decree_{uuid.uuid4().hex[:8]}")
+        text_decree = data.get("text_decree") or data.get("text", "")
         parameter_key = data.get("parameter_key")
         parameter_val = data.get("parameter_val")
+        if parameter_val is None:
+            parameter_val = data.get("parameter_value")
 
         if not self.engine:
             await client.send(
@@ -528,7 +585,7 @@ class GodotWebSocketBridge(WorldAdapter):
             )
         )
         if verdict.status == "SUCCESS":
-            self.broadcast_book_state(exclude=client)
+            self.broadcast_book_state(exclude=None)
 
     async def _handle_god_codex_approve(self, client: Any, data: dict[str, Any]) -> None:
         """Approves a pending Divine Codex proposal submitted by Goddess/Daughters."""
@@ -561,7 +618,7 @@ class GodotWebSocketBridge(WorldAdapter):
             )
         )
         if success:
-            self.broadcast_book_state(exclude=client)
+            self.broadcast_book_state(exclude=None)
 
     async def _handle_god_codex_reject(self, client: Any, data: dict[str, Any]) -> None:
         """Rejects a pending Divine Codex proposal submitted by Goddess/Daughters."""
@@ -594,7 +651,49 @@ class GodotWebSocketBridge(WorldAdapter):
             )
         )
         if success:
-            self.broadcast_book_state(exclude=client)
+            self.broadcast_book_state(exclude=None)
+
+    async def _handle_god_palace_decision(self, client: Any, data: dict[str, Any]) -> None:
+        """Handles live God decision on a mortal Palace Entry Petition."""
+        req_id = data.get("request_id", "")
+        decision = data.get("decision", "DENY")
+        duration = int(data.get("duration", 600))
+
+        if not self.engine or not hasattr(self.engine, "palace_security"):
+            await client.send(
+                json.dumps(
+                    {
+                        "type": "GOD_PALACE_DECISION_RESPONSE",
+                        "status": "FAILURE",
+                        "reason": "Engine offline or palace security unavailable",
+                        "request_id": req_id,
+                    }
+                )
+            )
+            return
+
+        resolved = self.engine.palace_security.resolve_request(
+            request_id=req_id,
+            decision=decision,
+            decided_by="GOD",
+            current_tick=self.engine.current_tick,
+            duration_ticks=duration,
+        )
+
+        status = "SUCCESS" if resolved else "FAILURE"
+        reason = f"Decision {decision} applied" if resolved else f"Request '{req_id}' not found"
+
+        await client.send(
+            json.dumps(
+                {
+                    "type": "GOD_PALACE_DECISION_RESPONSE",
+                    "status": status,
+                    "reason": reason,
+                    "request_id": req_id,
+                    "decision": decision,
+                }
+            )
+        )
 
     async def _handle_god_command(self, client: Any, data: dict[str, Any]) -> None:
         """Executes miscellaneous divine interventions and runtime controls."""
@@ -735,6 +834,59 @@ class GodotWebSocketBridge(WorldAdapter):
             )
         )
 
+    async def _handle_dialogue_request(self, client: Any, data: dict[str, Any]) -> None:
+        """Processes interactive dialogue request with Deity or Mortal asynchronously."""
+        from sim_core.schemas import DialogueRequest, DialogueResponse
+
+        dialogue_id = data.get("dialogue_id", f"dlg_{uuid.uuid4().hex[:8]}")
+        target_type = data.get("target_type", "DEITY")
+        target_id = data.get("target_id", "world_goddess")
+        message = data.get("message", "Greetings.")
+        order = data.get("order", "")
+
+        if (
+            not self.engine
+            or not hasattr(self.engine, "divine_llm_brain")
+            or not self.engine.divine_llm_brain
+        ):
+            resp = DialogueResponse(
+                target_id=target_id,
+                target_name="Silent Voice",
+                title="The Ether",
+                race="DIVINE",
+                mood="calm",
+                spoken_reply="The cosmos remains quiet. (Simulation engine offline)",
+                action_taken="",
+            )
+            await client.send(
+                json.dumps(
+                    {
+                        "type": "DIALOGUE_RESPONSE",
+                        "dialogue_id": dialogue_id,
+                        **resp.model_dump(),
+                    }
+                )
+            )
+            return
+
+        req = DialogueRequest(
+            dialogue_id=dialogue_id,
+            target_type=target_type,
+            target_id=target_id,
+            message=message,
+            order=order,
+        )
+        resp = await asyncio.to_thread(self.engine.divine_llm_brain.generate_dialogue, req)
+        await client.send(
+            json.dumps(
+                {
+                    "type": "DIALOGUE_RESPONSE",
+                    "dialogue_id": dialogue_id,
+                    **resp.model_dump(),
+                }
+            )
+        )
+
     # =========================================================================
     # Server Lifecycle & Connection Handling
     # =========================================================================
@@ -749,6 +901,31 @@ class GodotWebSocketBridge(WorldAdapter):
                     asyncio.create_task(c.send(msg))
                 except Exception:
                     pass
+
+    def broadcast_building_sync(self, exclude: Any = None) -> None:
+        """Broadcasts full BUILDING_SYNC to connected clients."""
+        payload = self.get_building_sync_payload()
+        msg = json.dumps(payload)
+        for c in list(self.clients):
+            if c != exclude:
+                try:
+                    asyncio.create_task(c.send(msg))
+                except Exception:
+                    pass
+
+    def broadcast_building_update(self, building: dict[str, Any] | Any) -> None:
+        """Broadcasts incremental BUILDING_UPDATE event to connected clients."""
+        bld_dict = (
+            building
+            if isinstance(building, dict)
+            else (building.model_dump() if hasattr(building, "model_dump") else dict(building))
+        )
+        self.send_json_broadcast(
+            {
+                "type": "BUILDING_UPDATE",
+                "building": bld_dict,
+            }
+        )
 
     async def _client_handler(self, websocket: Any) -> None:
         """Handles single WebSocket connection lifecycle."""
@@ -791,3 +968,6 @@ class GodotWebSocketBridge(WorldAdapter):
         self.clients.clear()
         if self.engine:
             self.engine.god_presence.set_active(False)
+
+    start = start_server_async
+    stop = stop_server_async

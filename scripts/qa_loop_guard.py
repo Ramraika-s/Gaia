@@ -32,11 +32,13 @@ HANDOFF_REPORTS_DIR = QA_DIR / "handoff_reports"
 
 class LockViolationError(Exception):
     """Raised when an operation violates active mutual-exclusion file locks."""
+
     pass
 
 
 class RollbackAbortedError(Exception):
     """Raised when atomic rollback pre-flight validation fails."""
+
     pass
 
 
@@ -69,6 +71,7 @@ def _resolve_live_path(path_str: str) -> Path:
 # ==============================================================================
 # 1. Mutual Exclusion Lock Management (.qa_loop/file_locks.json)
 # ==============================================================================
+
 
 def load_file_locks() -> dict[str, Any]:
     """Loads active locks from file_locks.json."""
@@ -187,6 +190,7 @@ def release_locks(
 # 2. Immutable SHA-256 Snapshot Backup
 # ==============================================================================
 
+
 def create_backup_snapshot(
     task_id: str,
     subagent_id: str,
@@ -246,6 +250,7 @@ def create_backup_snapshot(
 # ==============================================================================
 # 3. 4-Stage Atomic Rollback Transaction & Purge
 # ==============================================================================
+
 
 def rollback_atomic(
     task_id: str,

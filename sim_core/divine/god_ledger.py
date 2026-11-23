@@ -108,6 +108,7 @@ class GodLedgerPipeline:
         Aggregates >= 3 mortals praying at an altar parcel into a single unified
         message led by Prayer Head (Oracle -> Pope -> Cleric -> Elder -> Citizen).
         """
+
         def rank_sort_key(agent: dict[str, Any]) -> int:
             if agent.get("is_oracle", False):
                 return 0
@@ -122,9 +123,7 @@ class GodLedgerPipeline:
 
         sorted_agents = sorted(praying_agents, key=rank_sort_key)
         prayer_head = (
-            sorted_agents[0]
-            if sorted_agents
-            else {"display_name": "Unknown", "stage": "CITIZEN"}
+            sorted_agents[0] if sorted_agents else {"display_name": "Unknown", "stage": "CITIZEN"}
         )
 
         head_rank = "CITIZEN"
@@ -186,8 +185,7 @@ class GodLedgerPipeline:
 
         lines.append("\n## 2. Racial God-Mother Reports & Congregational Altars")
         altar_entries = [
-            e for e in self.buffer
-            if e.category in ("GOD_MOTHER_REPORT", "CONGREGATIONAL_ALTAR")
+            e for e in self.buffer if e.category in ("GOD_MOTHER_REPORT", "CONGREGATIONAL_ALTAR")
         ]
         if altar_entries:
             for entry in altar_entries:
@@ -209,8 +207,7 @@ class GodLedgerPipeline:
 
         lines.append("\n## 4. Self-Healing Error Solver Alerts")
         healer_entries = [
-            e for e in self.buffer
-            if e.category in ("HEALER_ALERT", "CRITICAL_ESCALATION")
+            e for e in self.buffer if e.category in ("HEALER_ALERT", "CRITICAL_ESCALATION")
         ]
         if healer_entries:
             for entry in healer_entries:

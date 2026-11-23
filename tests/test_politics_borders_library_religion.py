@@ -10,12 +10,14 @@ Acceptance tests for Phase 3B:
 from __future__ import annotations
 
 import json
+from typing import cast
 
 from sim_core.config import TICKS_PER_GAME_DAY
 from sim_core.persistence.world_goddess import WorldGoddessCritic
 from sim_core.schemas import (
     AgentRecord,
     CommitProposal,
+    DeitySlot,
     WorldLibraryEntry,
 )
 from sim_core.society.borders import BorderManager
@@ -30,6 +32,7 @@ from sim_core.society.religion import ReligionManager
 # =============================================================================
 # 1. World Library Governance (world_library) Acceptance Tests
 # =============================================================================
+
 
 def test_world_library_mortal_proposal_lifecycle_and_objection_window():
     """
@@ -105,6 +108,7 @@ def test_world_library_daughter_objection_block_and_appeal():
         current_tick=10,
         action="CREATE",
     )
+    assert prop is not None
 
     # Elders approve (1 of 1)
     engine.cast_elder_vote(
@@ -134,9 +138,7 @@ def test_world_library_daughter_objection_block_and_appeal():
     assert ok and prop.appeal_target == "WORLD_GODDESS"
 
     # Goddess upholds appeal -> COMMITTED
-    ok, msg = engine.resolve_appeal_world_goddess(
-        prop.proposal_id, approved=True, current_tick=60
-    )
+    ok, msg = engine.resolve_appeal_world_goddess(prop.proposal_id, approved=True, current_tick=60)
     assert ok and prop.status == "APPROVED"
     assert len(engine.library_entries) == 1
 
@@ -154,6 +156,7 @@ def test_world_library_expiry_after_30_days():
         current_tick=0,
         action="CREATE",
     )
+    assert prop is not None
     engine.cast_elder_vote(
         prop.proposal_id, elder_id="elder_1", vote="APPROVE", total_appointed_elders=1
     )
@@ -234,6 +237,7 @@ def test_world_library_divine_direct_edits():
 # 2. Divine Rules Book (divine_codex) Option B Acceptance Tests
 # =============================================================================
 
+
 def test_divine_codex_option_b_split_write_authority():
     """
     Verifies Divine Codex Option B:
@@ -299,7 +303,8 @@ def test_divine_codex_option_b_split_write_authority():
         co_sponsors=[],
         current_tick=102,
     )
-    assert ok and codex_prop.status == "PENDING_GOD"
+    assert ok and codex_prop is not None
+    assert codex_prop.status == "PENDING_GOD"
 
     # God approves proposal -> parameter override committed & live engine updated!
     ok, msg, approved_entry = engine.approve_codex_proposal_by_god(
@@ -318,7 +323,8 @@ def test_divine_codex_option_b_split_write_authority():
         co_sponsors=["gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"],
         current_tick=110,
     )
-    assert ok and daug_prop.status == "PENDING_GOD"
+    assert ok and daug_prop is not None
+    assert daug_prop.status == "PENDING_GOD"
 
     # 4/5 Daughters proposal without Goddess FAILS submission
     ok_fail, msg_fail, _ = engine.submit_parameter_override_proposal(
@@ -360,6 +366,7 @@ def test_divine_codex_option_b_split_write_authority():
 # =============================================================================
 # 3. Territorial Borders & Neutral Free Cities Acceptance Tests
 # =============================================================================
+
 
 def test_territorial_borders_appeals_and_neutral_free_cities():
     """
@@ -448,6 +455,7 @@ def test_territorial_borders_appeals_and_neutral_free_cities():
 # 4. Dynamic Faith & Congregational Altars Acceptance Tests
 # =============================================================================
 
+
 def test_dynamic_faith_intent_scaled_gains_and_inactivity_decay():
     """
     Verifies religious dynamics:
@@ -468,7 +476,12 @@ def test_dynamic_faith_intent_scaled_gains_and_inactivity_decay():
         stage="ADULT",
         traits={"faith_devotion": 0.20},
     )
-    ok, reason, _ = rm.pray(agent, target_deity_slot="GOD", intent="EARNEST", current_tick=10)
+    ok, reason, _ = rm.pray(
+        agent,
+        target_deity_slot=cast(DeitySlot, "GOD"),  # type: ignore[arg-type]
+        intent="EARNEST_VOLUNTARY",
+        current_tick=10,
+    )
     assert not ok
     assert "FORBIDDEN" in reason
 
@@ -492,8 +505,8 @@ def test_dynamic_faith_intent_scaled_gains_and_inactivity_decay():
         traits={"faith_devotion": 0.20},
     )
 
-    rm.pray(agent_earnest, "gm_human", "EARNEST", current_tick=10)
-    rm.pray(agent_obligation, "gm_human", "OBLIGATION", current_tick=10)
+    rm.pray(agent_earnest, "gm_human", "EARNEST_VOLUNTARY", current_tick=10)
+    rm.pray(agent_obligation, "gm_human", "PARENT_DIRECTED", current_tick=10)
 
     assert agent_earnest.traits["faith_devotion"] > agent_obligation.traits["faith_devotion"]
 

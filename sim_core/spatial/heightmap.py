@@ -28,7 +28,7 @@ class Heightmap:
         max_x: float = WORLD_MAX_X,
         min_z: float = WORLD_MIN_Z,
         max_z: float = WORLD_MAX_Z,
-        fallback_resolution: int = 512,
+        fallback_resolution: int = 1024,
     ) -> None:
         self.min_x: float = float(min_x)
         self.max_x: float = float(max_x)

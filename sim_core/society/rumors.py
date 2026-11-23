@@ -21,6 +21,7 @@ INTERACTION_RUMOR_EXCHANGE_COUNT = 2
 
 class RumorPacket(BaseModel):
     """Discrete information packet traveling physically between mortal agents."""
+
     rumor_id: str = Field(default_factory=lambda: f"rumor_{uuid.uuid4().hex[:8]}")
     topic: str
     content: str
@@ -100,7 +101,7 @@ class RumorNetwork:
         # Sort by salience * credibility descending
         buf.sort(key=lambda r: r.salience * r.credibility, reverse=True)
         if len(buf) > self.max_per_agent:
-            del buf[self.max_per_agent:]
+            del buf[self.max_per_agent :]
         return True
 
     def exchange_rumors(

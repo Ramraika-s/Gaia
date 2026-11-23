@@ -20,6 +20,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from sim_core.config import TICKS_PER_GAME_DAY
 from sim_core.persistence.db import run_analytics_query
 from sim_core.schemas import CommitProposal, FatalityRecord, WorldLibraryEntry
 
@@ -270,8 +271,8 @@ class RichGodConsole:
                 f.display_name,
                 f.race,
                 f.stage_at_death,
-                str(f.day_of_death),
-                f.season_of_death,
+                str(f.death_day),
+                f.season,
                 f.cause,
             )
 
@@ -282,7 +283,7 @@ class RichGodConsole:
         cases = list(self.engine.judiciary.cases.values())
         if args:
             target = args[0]
-            cases = [c for c in cases if c.accused_id == target or c.plaintiff_id == target]
+            cases = [c for c in cases if c.accused_id == target or c.victim_id == target]
 
         if not cases:
             return "No judiciary cases recorded."
@@ -312,21 +313,21 @@ class RichGodConsole:
             return "No polities registered yet."
 
         table = Table(title="Polities & Nations", border_style="blue")
-        table.add_column("Polity ID")
+        table.add_column("Settlement ID")
         table.add_column("Name")
         table.add_column("Tier")
-        table.add_column("Government")
+        table.add_column("Regime")
         table.add_column("Parcels", justify="right")
         table.add_column("Wars", style="bold red")
         table.add_column("Neutral Free City")
 
         for p in polities:
             table.add_row(
-                p.polity_id,
+                p.settlement_id,
                 p.name,
                 p.tier,
-                p.government_type,
-                str(len(p.owned_parcel_ids)),
+                p.regime_type,
+                str(len(p.border_parcels)),
                 str(len(p.at_war_with)),
                 "YES" if p.is_neutral_free_city else "NO",
             )
@@ -336,40 +337,40 @@ class RichGodConsole:
     def _cmd_borders(self) -> str:
         """Lists parcel border counts per settlement/polity."""
         table = Table(title="Territory Borders", border_style="blue")
-        table.add_column("Polity ID")
+        table.add_column("Settlement ID")
         table.add_column("Name")
         table.add_column("Parcel Count", justify="right")
 
         for p in self.engine.political_engine.polities.values():
-            table.add_row(p.polity_id, p.name, str(len(p.owned_parcel_ids)))
+            table.add_row(p.settlement_id, p.name, str(len(p.border_parcels)))
 
         return self._render_table_to_str(table)
 
     def _cmd_elections(self) -> str:
         """Shows election cycles and leaders."""
         table = Table(title="Leadership & Elections", border_style="cyan")
-        table.add_column("Polity ID")
+        table.add_column("Settlement ID")
         table.add_column("Name")
         table.add_column("Leader ID")
-        table.add_column("Gov Type")
+        table.add_column("Regime")
         table.add_column("Next Election Day", justify="right")
 
         for p in self.engine.political_engine.polities.values():
             table.add_row(
-                p.polity_id,
+                p.settlement_id,
                 p.name,
                 p.leader_id or "NONE",
-                p.government_type,
-                str(p.next_election_day),
+                p.regime_type,
+                "N/A",
             )
 
         return self._render_table_to_str(table)
 
     def _cmd_religions(self) -> str:
         """Lists organized religions and altars."""
-        religions = list(self.engine.religion_mgr.religions.values())
+        religions = list(getattr(self.engine.religion_mgr, "religions", {}).values())
         if not religions:
-            return "No organized religions established."
+            return "No organized religions established (stored in database)."
 
         table = Table(title="Religions & Faiths", border_style="gold3")
         table.add_column("Religion ID")
@@ -415,33 +416,36 @@ class RichGodConsole:
 
     def _cmd_council(self) -> str:
         """Shows recent Sister Council dialogues and truces."""
-        history = self.engine.sister_council.council_history
-        if not history:
-            return "No Sister Council sessions recorded."
+        messages = self.engine.sister_council.messages
+        if not messages:
+            return "No Sister Council messages recorded."
 
-        lines = [f"[bold]Sister Council Sessions ({len(history)} total):[/bold]"]
-        for sess in history[-5:]:
+        lines = [f"[bold]Sister Council Messages ({len(messages)} total):[/bold]"]
+        for m in messages[-10:]:
+            recipients = ", ".join(m.recipient_slots)
             lines.append(
-                f"- [cyan]{sess.session_type}[/cyan] ({sess.topic}) - Status: {sess.status} "
-                f"(Attendees: {', '.join(sess.attendees)})"
+                f"- [cyan]{m.topic}[/cyan] (Day {m.day}, Tick {m.tick}) "
+                f"[{m.sender_slot} -> {recipients}]: {m.summary}"
             )
-            for m in sess.messages[-3:]:
-                lines.append(f"  [dim]{m.sender_slot}:[/dim] {m.message}")
+            if m.resolution:
+                lines.append(f"  [dim]Resolution:[/dim] {m.resolution}")
 
         return "\n".join(lines)
 
     def _cmd_elders(self) -> str:
         """Displays Appointed Library Elders per nation."""
-        elders = self.engine.governance_engine.library_council_elders
-        if not elders:
-            return "No Appointed Library Elders currently registered."
-
         table = Table(title="Council of Appointed Library Elders", border_style="cyan")
         table.add_column("Nation ID")
         table.add_column("Elder Agent IDs")
 
-        for nation_id, elist in elders.items():
-            table.add_row(nation_id, ", ".join(elist))
+        total = 0
+        for p in self.engine.political_engine.polities.values():
+            if p.appointed_library_elders:
+                table.add_row(p.settlement_id, ", ".join(p.appointed_library_elders))
+                total += len(p.appointed_library_elders)
+
+        if total == 0:
+            return "No Appointed Library Elders currently registered."
 
         return self._render_table_to_str(table)
 
@@ -451,11 +455,12 @@ class RichGodConsole:
         table = Table(title=title_str, border_style="green")
         table.add_column("Commodity")
         table.add_column("Price (Credits)", justify="right")
-        table.add_column("24h Volume", justify="right")
+        table.add_column("Orders (Bids / Asks)", justify="right")
 
-        for comm, price in self.engine.wtc.prices.items():
-            vol = self.engine.wtc.volume_24h.get(comm, 0.0)
-            table.add_row(comm, f"{price:.2f}", f"{vol:.1f}")
+        for comm, price in self.engine.wtc.current_prices.items():
+            bids_cnt = len(self.engine.wtc.bids.get(comm, []))
+            asks_cnt = len(self.engine.wtc.asks.get(comm, []))
+            table.add_row(comm, f"{price:.2f}", f"{bids_cnt} bids / {asks_cnt} asks")
 
         return self._render_table_to_str(table)
 
@@ -468,7 +473,7 @@ class RichGodConsole:
 
         table.add_row("Circulating Money Supply (M)", f"{total_m:.2f} credits")
         table.add_row("Bank Vault Reserves", f"{self.engine.bank.reserve_credits:.2f} credits")
-        table.add_row("Interest Rate (Base)", f"{self.engine.bank.interest_rate * 100:.2f}%")
+        table.add_row("Interest Rate (Base)", "2.00%")
         table.add_row("Active Loans", str(len(self.engine.bank.loans)))
         table.add_row("Defaulted Loans", str(len(self.engine.bank.defaulted_cases)))
 
@@ -512,7 +517,11 @@ class RichGodConsole:
 
         lines = [f"[bold]Active Cultural Traditions ({len(trads)} settlements):[/bold]"]
         for s_id, t_list in trads.items():
-            t_names = [t.name for t in t_list]
+            t_names = [
+                self.engine.traditions.traditions[tid].name
+                for tid in t_list
+                if tid in self.engine.traditions.traditions
+            ]
             lines.append(f"- [cyan]{s_id}[/cyan]: {', '.join(t_names)}")
 
         return "\n".join(lines)
@@ -559,12 +568,19 @@ class RichGodConsole:
 
         if args:
             topic = args[0]
-            matches = [b for b in lib.values() if b.topic == topic]
+            matches = [
+                b
+                for b in lib.values()
+                if (b.topic if isinstance(b, WorldLibraryEntry) else b.subject) == topic
+            ]
             if matches:
                 book = matches[0]
+                b_topic = book.topic if isinstance(book, WorldLibraryEntry) else book.subject
+                b_author = book.author_id if isinstance(book, WorldLibraryEntry) else book.author
+                b_reads = book.read_count if isinstance(book, WorldLibraryEntry) else 0
                 return (
-                    f"[bold gold3]{book.title}[/bold gold3] (Topic: {book.topic})\n"
-                    f"Author: {book.author_id} | Read count: {book.read_count}\n\n"
+                    f"[bold gold3]{book.title}[/bold gold3] (Topic: {b_topic})\n"
+                    f"Author: {b_author} | Read count: {b_reads}\n\n"
                     f"{book.summary}"
                 )
             return f"No canonical volume found for topic '{topic}'."
@@ -576,7 +592,10 @@ class RichGodConsole:
         table.add_column("Reads", justify="right")
 
         for b in lib.values():
-            table.add_row(b.topic, b.title, b.author_id, str(b.read_count))
+            b_topic = b.topic if isinstance(b, WorldLibraryEntry) else b.subject
+            b_author = b.author_id if isinstance(b, WorldLibraryEntry) else b.author
+            b_reads = str(b.read_count) if isinstance(b, WorldLibraryEntry) else "0"
+            table.add_row(b_topic, b.title, b_author, b_reads)
 
         return self._render_table_to_str(table)
 
@@ -587,9 +606,7 @@ class RichGodConsole:
             if len(args) < 2:
                 return "Usage: codex approve <proposal_id>"
             pid = args[1]
-            success, reason, _ = gov.approve_codex_proposal_by_god(
-                pid, self.engine.current_tick
-            )
+            success, reason, _ = gov.approve_codex_proposal_by_god(pid, self.engine.current_tick)
             res_str = "SUCCESS" if success else "FAILURE"
             return f"Codex proposal '{pid}' approval: {res_str} ({reason})."
 
@@ -761,7 +778,8 @@ class RichGodConsole:
 
         table.add_row("Race / Sub-lineage", f"{ag.race} ({ag.sub_lineage or 'None'})")
         table.add_row("Gender / Stage", f"{ag.gender} / {ag.stage}")
-        table.add_row("Biological Age", f"{ag.age_days:.2f} days")
+        age_days = ag.age_ticks / float(TICKS_PER_GAME_DAY)
+        table.add_row("Biological Age", f"{age_days:.2f} days")
         table.add_row("Health / Max", f"{ag.health:.1f} / {ag.max_health:.1f}")
         table.add_row("Hunger / Stamina", f"{ag.hunger:.1f} / {ag.stamina:.1f}")
         table.add_row("Distress / Crying", f"{ag.distress:.2f} / {'YES' if ag.crying else 'NO'}")
@@ -910,7 +928,7 @@ class RichGodConsole:
             self.engine.political_engine.declare_war(p1, p2)
             return f"War declared: {p1} vs {p2}."
         elif action == "peace":
-            self.engine.political_engine.resolve_peace(p1, p2)
+            self.engine.political_engine.sign_peace(p1, p2)
             return f"Peace signed between {p1} and {p2}."
         return "Unknown war action. Use 'declare' or 'peace'."
 
@@ -964,7 +982,7 @@ class RichGodConsole:
         if not ag:
             return f"Agent '{agent_id}' not found."
         polity.leader_id = agent_id
-        polity.government_type = "KING"
+        polity.regime_type = "KING"
         return f"Agent '{ag.display_name}' coronated King of {nation_id}."
 
     def _cmd_appoint_pope(self, args: list[str]) -> str:
@@ -972,14 +990,12 @@ class RichGodConsole:
         if len(args) < 2:
             return "Usage: appoint_pope <religion_id> <agent_id>"
         rel_id, agent_id = args[0], args[1]
-        rel = self.engine.religion_mgr.religions.get(rel_id)
-        if not rel:
-            return f"Religion '{rel_id}' not found."
         ag = self.engine.agents.get(agent_id)
         if not ag:
             return f"Agent '{agent_id}' not found."
-        rel.pope_id = agent_id
-        return f"Agent '{ag.display_name}' appointed Pope of {rel.name}."
+        ag.cleric_rank = "POPE"
+        ag.religion_id = rel_id
+        return f"Agent '{ag.display_name}' appointed Pope of {rel_id}."
 
     def _cmd_decree(self, args: list[str]) -> str:
         """Broadcasts divine decree: decree "<msg>"."""
@@ -1037,21 +1053,17 @@ class RichGodConsole:
         )
 
     def _cmd_rewind(self, args: list[str]) -> str:
-        """Rewinds to a previous verified snapshot: rewind <day>."""
-        if not args:
-            return "Usage: rewind <day>"
+        """Rewinds world to last verified snapshot: rewind."""
         try:
-            target_day = int(args[0])
-        except ValueError:
-            return "Day must be an integer: rewind <day>"
-        try:
-            res = self.engine.checkpoint_mgr.rewind_to_day(target_day)
+            day, manifest, alert_msg = self.engine.checkpoint_mgr.restore_or_rewind_on_boot(
+                live_db_path=self.engine.db_path
+            )
             return (
-                f"Rewound to Day {target_day}.\n"
-                f"DB: {res['db_path']} | PT: {res['pt_path']} (SHA: {res['db_sha256'][:12]}...)"
+                f"{alert_msg}\n"
+                f"Restored Day {day} (DB: {manifest.db_path}, SHA: {manifest.db_sha256[:12]}...)"
             )
         except Exception as exc:
-            return f"Failed to rewind to Day {target_day}: {exc}"
+            return f"Failed to restore/rewind snapshot: {exc}"
 
     def _cmd_shutdown(self) -> str:
         """Safely saves and stops engine."""
@@ -1103,3 +1115,6 @@ class RichGodConsole:
             "  rewind <day>                  - Rewind world to verified daily snapshot\n"
             "  shutdown                      - Safely commit and terminate simulation"
         )
+
+
+GodConsoleCLI = RichGodConsole

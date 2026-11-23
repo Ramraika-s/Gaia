@@ -35,7 +35,7 @@ class SisterCouncilEngine:
         target = self.hierarchy.get_deity(target_slot)
 
         msg_id = f"truce_{day}_{tick}_{uuid.uuid4().hex[:6]}"
-        accepted = (sender.personality.diplomacy >= 0.50 and target.personality.diplomacy >= 0.50)
+        accepted = sender.personality.diplomacy >= 0.50 and target.personality.diplomacy >= 0.50
 
         if accepted:
             if target_slot not in sender.active_truce_with:

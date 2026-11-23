@@ -30,6 +30,19 @@ const RACE_ASSET_PATHS: Dictionary = {
 	"BEASTHUMAN_BOY": "res://assets/mortals/races/base_beasthuman_male.glb",
 	"BEASTHUMAN_GIRL": "res://assets/mortals/races/base_beasthuman_female.glb",
 	"DEMON_ALL": "res://assets/mortals/races/base_demon.gltf",
+	"KNIGHT_BOY": "res://assets/mortals/outfits/full/male_ranger.gltf",
+	"KNIGHT_GIRL": "res://assets/mortals/outfits/full/female_ranger.gltf",
+}
+
+const GEAR_PROPS_PATHS: Dictionary = {
+	"SWORD": "res://assets/buildings/props/sword_bronze.gltf",
+	"HOE": "res://assets/buildings/props/axe_bronze.gltf",
+	"PICKAXE": "res://assets/buildings/props/pickaxe_bronze.gltf",
+	"HAMMER": "res://assets/buildings/props/axe_bronze.gltf",
+	"TOME": "res://assets/buildings/props/book_simplified_single.gltf",
+	"HOOD": "res://assets/mortals/outfits/parts/female_ranger_head_hood.gltf",
+	"PAULDRONS": "res://assets/mortals/outfits/parts/female_ranger_acc_pauldrons.gltf",
+	"LANTERN": "res://assets/buildings/props/lantern_wall.gltf",
 }
 
 # Shared static scene cache to avoid redundant disk reads across pool
@@ -43,6 +56,7 @@ static var _scene_cache: Dictionary = {}
 @onready var oracle_aura_particles: GPUParticles3D = $VisualRoot/OracleAuraParticles
 @onready var fear_aura_ring: Node3D = $VisualRoot/FearAuraRing
 @onready var nameplate_label: Label3D = $NameplateLabel
+@onready var speech_bubble_label: Label3D = $SpeechBubbleLabel
 @onready var morph_controller: Node3D = $DragonMorphController
 
 var agent_id: String = ""
@@ -51,9 +65,11 @@ var gender: String = "GIRL"
 var stage: String = "ADULT"
 var full_name: String = "Citizen"
 var dynasty: String = "Founder"
+var role: String = "CITIZEN"
 var is_crying: bool = false
 var is_oracle: bool = false
 var dragon_form: String = "HUMANOID_DRAGON"
+var equipped_gear: Array = []
 
 var target_position: Vector3 = Vector3.ZERO
 var target_rotation_y: float = 0.0
@@ -61,11 +77,51 @@ var is_pool_active: bool = false
 
 var _current_active_key: String = ""
 var _instanced_mesh_nodes: Dictionary = {}
+var _gear_container: Node3D = null
+var _lantern_light: OmniLight3D = null
+var _instanced_gear_nodes: Dictionary = {}
 var _walk_time: float = 0.0
+var _base_y_offset: float = 0.0
+var humanoid_animator: HumanoidAnimator = null
+
+
+func _ensure_references() -> void:
+	if not visual_root:
+		visual_root = get_node_or_null("VisualRoot")
+	if not humanoid_mesh_node and visual_root:
+		humanoid_mesh_node = visual_root.get_node_or_null("HumanoidMeshNode")
+	if not true_dragon_mesh_node and visual_root:
+		true_dragon_mesh_node = visual_root.get_node_or_null("TrueDragonMeshNode")
+	if not nameplate_label:
+		nameplate_label = get_node_or_null("NameplateLabel")
+	if not speech_bubble_label:
+		speech_bubble_label = get_node_or_null("SpeechBubbleLabel")
+	if not crying_particles and visual_root:
+		crying_particles = visual_root.get_node_or_null("CryingParticles")
+	if not crying_audio and visual_root:
+		crying_audio = visual_root.get_node_or_null("CryingAudio")
+	if not oracle_aura_particles and visual_root:
+		oracle_aura_particles = visual_root.get_node_or_null("OracleAuraParticles")
+	if not fear_aura_ring and visual_root:
+		fear_aura_ring = visual_root.get_node_or_null("FearAuraRing")
+	if not morph_controller:
+		morph_controller = get_node_or_null("DragonMorphController")
+	if not _gear_container and visual_root:
+		_gear_container = visual_root.get_node_or_null("GearContainer")
+		if not _gear_container:
+			_gear_container = Node3D.new()
+			_gear_container.name = "GearContainer"
+			visual_root.add_child(_gear_container)
 
 
 func _ready() -> void:
 	visible = false
+	_ensure_references()
+	if not humanoid_animator:
+		humanoid_animator = HumanoidAnimator.new()
+		humanoid_animator.name = "HumanoidAnimator"
+		add_child(humanoid_animator)
+
 	_preload_base_scenes()
 	if morph_controller:
 		morph_controller.humanoid_node = humanoid_mesh_node
@@ -84,15 +140,18 @@ func _preload_base_scenes() -> void:
 
 
 func bind_agent_data(data: Dictionary) -> void:
+	_ensure_references()
 	agent_id = data.get("agent_id", "")
 	race = data.get("race", "HUMAN").to_upper()
 	gender = data.get("gender", "GIRL").to_upper()
 	stage = data.get("stage", "ADULT").to_upper()
 	full_name = data.get("name", "Citizen")
 	dynasty = data.get("dynasty", "Founder")
+	role = data.get("role", "CITIZEN").to_upper()
 	is_crying = data.get("crying", false)
 	is_oracle = data.get("is_oracle", false)
 	dragon_form = data.get("dragon_form", "HUMANOID_DRAGON")
+	equipped_gear = data.get("equipped_gear", [])
 
 	var px: float = float(data.get("x", global_position.x))
 	var py: float = float(data.get("y", global_position.y))
@@ -101,6 +160,14 @@ func bind_agent_data(data: Dictionary) -> void:
 
 	var rot: float = float(data.get("rotation_y", rotation.y))
 	target_rotation_y = rot
+
+	var speech: String = str(data.get("speech_text", ""))
+	if speech_bubble_label:
+		if speech != "":
+			speech_bubble_label.text = "“%s”" % speech
+			speech_bubble_label.visible = true
+		else:
+			speech_bubble_label.visible = false
 
 	if not is_pool_active:
 		global_position = target_position
@@ -115,6 +182,15 @@ func release_to_pool() -> void:
 	is_pool_active = false
 	visible = false
 	agent_id = ""
+	equipped_gear.clear()
+	if _lantern_light:
+		_lantern_light.visible = false
+	for k in _instanced_gear_nodes:
+		var n: Node = _instanced_gear_nodes[k]
+		if is_instance_valid(n):
+			n.visible = false
+	if speech_bubble_label:
+		speech_bubble_label.visible = false
 	if crying_particles:
 		crying_particles.emitting = false
 		crying_particles.visible = false
@@ -141,14 +217,22 @@ func _apply_visuals() -> void:
 
 	if race == "DRAGON" and dragon_form == "TRUE_DRAGON":
 		visual_root.scale = Vector3.ONE  # True Dragon scaling handled inside TrueDragonMeshNode
+		visual_root.position.y = 0.0
 	else:
 		visual_root.scale = Vector3(final_scale, final_scale, final_scale)
+		var active_mesh_node: Node = _instanced_mesh_nodes.get(mesh_key, null)
+		var min_y: float = _get_min_mesh_y(active_mesh_node)
+		_base_y_offset = -min_y * final_scale
+		visual_root.position.y = _base_y_offset
 
 	# Dragon morph controller
 	if morph_controller:
 		morph_controller.set_is_dragon(race == "DRAGON")
 		if race == "DRAGON":
 			morph_controller.set_form(dragon_form)
+
+	# Modular gear props & carried items
+	_update_gear_props()
 
 	# Crying state & audio
 	if crying_particles:
@@ -170,7 +254,93 @@ func _apply_visuals() -> void:
 	_update_nameplate(final_scale)
 
 
+func _update_gear_props() -> void:
+	if not _gear_container:
+		return
+
+	# Hide all existing gear props initially
+	for k in _instanced_gear_nodes:
+		var n: Node = _instanced_gear_nodes[k]
+		if is_instance_valid(n):
+			n.visible = false
+
+	if _lantern_light:
+		_lantern_light.visible = false
+
+	if race == "DRAGON" and dragon_form == "TRUE_DRAGON":
+		return
+
+	for item in equipped_gear:
+		var item_str: String = str(item).to_upper()
+		if item_str == "LANTERN":
+			_ensure_lantern()
+			if _lantern_light:
+				_lantern_light.visible = true
+			if _instanced_gear_nodes.has("LANTERN"):
+				_instanced_gear_nodes["LANTERN"].visible = true
+		elif item_str in GEAR_PROPS_PATHS:
+			_attach_gear_prop(item_str)
+
+
+func _ensure_lantern() -> void:
+	if not _lantern_light:
+		_lantern_light = OmniLight3D.new()
+		_lantern_light.name = "LanternLight"
+		_lantern_light.light_color = Color(1.0, 0.78, 0.42, 1.0)
+		_lantern_light.light_energy = 1.2
+		_lantern_light.omni_range = 5.0
+		_lantern_light.shadow_enabled = false
+		_lantern_light.position = Vector3(0.35, 0.85, 0.25)
+		_gear_container.add_child(_lantern_light)
+
+	if not _instanced_gear_nodes.has("LANTERN") and ResourceLoader.exists(GEAR_PROPS_PATHS["LANTERN"]):
+		var scene: PackedScene = load(GEAR_PROPS_PATHS["LANTERN"])
+		if scene:
+			var inst: Node3D = scene.instantiate() as Node3D
+			inst.name = "LanternMesh"
+			inst.position = Vector3(0.35, 0.85, 0.25)
+			inst.scale = Vector3(0.35, 0.35, 0.35)
+			_gear_container.add_child(inst)
+			_instanced_gear_nodes["LANTERN"] = inst
+
+
+func _attach_gear_prop(item_id: String) -> void:
+	if _instanced_gear_nodes.has(item_id):
+		var node: Node = _instanced_gear_nodes[item_id]
+		if is_instance_valid(node):
+			node.visible = true
+			return
+
+	var path: String = GEAR_PROPS_PATHS.get(item_id, "")
+	if path == "" or not ResourceLoader.exists(path):
+		return
+
+	var scene: PackedScene = load(path)
+	if not scene:
+		return
+
+	var inst: Node3D = scene.instantiate() as Node3D
+	inst.name = "Prop_" + item_id
+
+	if item_id in ["SWORD", "HOE", "PICKAXE", "HAMMER", "TOME"]:
+		inst.position = Vector3(0.38, 0.85, 0.15)
+		inst.scale = Vector3(0.45, 0.45, 0.45)
+	elif item_id == "HOOD":
+		inst.position = Vector3(0.0, 1.45, 0.0)
+		inst.scale = Vector3(0.95, 0.95, 0.95)
+	elif item_id == "PAULDRONS":
+		inst.position = Vector3(0.0, 1.25, 0.0)
+		inst.scale = Vector3(0.9, 0.9, 0.9)
+
+	_gear_container.add_child(inst)
+	_instanced_gear_nodes[item_id] = inst
+	inst.visible = true
+
+
 func _resolve_mesh_key() -> String:
+	if role == "PALACE_KNIGHT":
+		return "KNIGHT_BOY" if gender == "BOY" else "KNIGHT_GIRL"
+
 	match race:
 		"ELF":
 			return "ELF_BOY" if gender == "BOY" else "ELF_GIRL"
@@ -201,6 +371,8 @@ func _switch_mesh_node(key: String) -> void:
 		var node: Node = _instanced_mesh_nodes[key]
 		if is_instance_valid(node):
 			node.visible = true
+			if humanoid_animator:
+				humanoid_animator.bind_target(node)
 			return
 
 	# Instance from cached PackedScene
@@ -211,6 +383,8 @@ func _switch_mesh_node(key: String) -> void:
 		humanoid_mesh_node.add_child(inst)
 		_instanced_mesh_nodes[key] = inst
 		inst.visible = true
+		if humanoid_animator:
+			humanoid_animator.bind_target(inst)
 	else:
 		# Fallback primitive mesh if asset is unavailable
 		var fallback: MeshInstance3D = MeshInstance3D.new()
@@ -222,6 +396,8 @@ func _switch_mesh_node(key: String) -> void:
 		humanoid_mesh_node.add_child(fallback)
 		_instanced_mesh_nodes[key] = fallback
 		fallback.visible = true
+		if humanoid_animator:
+			humanoid_animator.bind_target(fallback)
 
 
 func _update_nameplate(current_scale: float) -> void:
@@ -229,7 +405,9 @@ func _update_nameplate(current_scale: float) -> void:
 		return
 
 	var text: String = ""
-	if is_oracle:
+	if role == "PALACE_KNIGHT":
+		text += "⚔ [PALACE KNIGHT] ⚔\n"
+	elif is_oracle:
 		text += "★ [DIVINE ORACLE] ★\n"
 	text += "%s %s\n" % [full_name, dynasty]
 	text += "[%s • %s]" % [race, stage]
@@ -253,9 +431,63 @@ func _process(delta: float) -> void:
 
 	# Procedural walk bob
 	var dist: float = (target_position - global_position).length()
+	var bob: float = 0.0
 	if dist > 0.08:
 		_walk_time += delta * 12.0
-		visual_root.position.y = abs(sin(_walk_time)) * 0.06
+		bob = abs(sin(_walk_time)) * 0.06
 	else:
 		_walk_time = 0.0
-		visual_root.position.y = lerpf(visual_root.position.y, 0.0, delta * 6.0)
+	visual_root.position.y = lerpf(visual_root.position.y, _base_y_offset + bob, delta * 10.0)
+
+	# Update HumanoidAnimator
+	if humanoid_animator and humanoid_mesh_node.visible:
+		var speed: float = dist / maxf(delta, 0.001)
+		humanoid_animator.set_velocity((target_position - global_position) / maxf(delta, 0.001))
+		if is_crying:
+			humanoid_animator.set_state(HumanoidAnimator.AnimState.CRY)
+		elif is_oracle:
+			humanoid_animator.set_state(HumanoidAnimator.AnimState.PRAY)
+		elif speed > 4.5:
+			humanoid_animator.set_state(HumanoidAnimator.AnimState.RUN)
+		elif speed > 0.4:
+			humanoid_animator.set_state(HumanoidAnimator.AnimState.WALK)
+		else:
+			humanoid_animator.set_state(HumanoidAnimator.AnimState.IDLE)
+
+	# Ensure True Dragon animation plays when transformed
+	if true_dragon_mesh_node and true_dragon_mesh_node.visible:
+		var dragon_ap: AnimationPlayer = true_dragon_mesh_node.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if dragon_ap and dragon_ap.has_animation("RedDragon_Armature|flightTest") and dragon_ap.current_animation != "RedDragon_Armature|flightTest":
+			dragon_ap.play("RedDragon_Armature|flightTest")
+
+	# Update Lantern glow based on night factor
+	if _lantern_light and _lantern_light.visible:
+		var nf_param = RenderingServer.global_shader_parameter_get("night_factor")
+		var nf: float = float(nf_param) if nf_param != null else 0.0
+		_lantern_light.light_energy = 0.2 + (1.2 * nf)
+
+
+func _get_min_mesh_y(node: Node, parent_y: float = 0.0) -> float:
+	if node == null:
+		return 0.0
+	var min_val: float = 0.0
+	var found: bool = false
+
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh:
+		var aabb: AABB = (node as MeshInstance3D).mesh.get_aabb()
+		var y: float = parent_y + aabb.position.y * (node as MeshInstance3D).scale.y
+		min_val = y
+		found = true
+
+	for child in node.get_children():
+		var child_offset: float = parent_y
+		if child is Node3D:
+			child_offset += (child as Node3D).position.y
+		var child_min: float = _get_min_mesh_y(child, child_offset)
+		if not found:
+			min_val = child_min
+			found = true
+		else:
+			min_val = minf(min_val, child_min)
+
+	return min_val if found else 0.0

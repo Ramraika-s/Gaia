@@ -185,8 +185,10 @@ def test_spatial_hash_grid_benchmark():
     query_duration_total_ms = (time.perf_counter() - t1) * 1000.0
     avg_query_ms = query_duration_total_ms / 50.0
 
-    print(f"\n[SPATIAL_BENCHMARK] 10,000 agents inserted in {insert_duration_ms:.3f} ms. "
-          f"Average 140m bubble query: {avg_query_ms:.4f} ms.")
+    print(
+        f"\n[SPATIAL_BENCHMARK] 10,000 agents inserted in {insert_duration_ms:.3f} ms. "
+        f"Average 140m bubble query: {avg_query_ms:.4f} ms."
+    )
 
     # High performance threshold: batch insert under 100ms, single query under 0.1ms
     assert avg_query_ms < 0.1, f"Average query took {avg_query_ms:.4f} ms (expected < 0.1 ms)"

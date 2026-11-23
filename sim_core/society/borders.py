@@ -77,8 +77,7 @@ class BorderManager:
 
             # Check >= 2 races at >= 15% share
             qualifying_races = [
-                race for race, count in demographics.items()
-                if (count / float(living_pop)) >= 0.15
+                race for race, count in demographics.items() if (count / float(living_pop)) >= 0.15
             ]
             if len(qualifying_races) < 2:
                 return False, "Rejected: Neutral Free City requires >=2 races at >=15% share"

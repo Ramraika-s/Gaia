@@ -57,6 +57,7 @@ func _connect_bridge_signals() -> void:
 		bridge.world_time_weather_received.connect(_on_time_weather_received)
 		bridge.divine_hud_message_received.connect(_on_divine_hud_message_received)
 		bridge.sign_update_received.connect(_on_sign_update_received)
+		bridge.palace_entry_requested.connect(_on_palace_entry_requested)
 
 		if bridge.is_bridge_connected():
 			_on_bridge_connected()
@@ -215,3 +216,99 @@ func add_feed_message(data: Dictionary) -> void:
 		var oldest: Node = message_container.get_child(0)
 		message_container.remove_child(oldest)
 		oldest.queue_free()
+
+
+func _on_palace_entry_requested(data: Dictionary) -> void:
+	if message_container == null:
+		return
+
+	var req_id: String = data.get("request_id", "")
+	var agent_name: String = data.get("name", "Unknown Mortal")
+	var race_name: String = data.get("race", "HUMAN")
+	var title_str: String = data.get("title", "Citizen")
+	var crimes: int = int(data.get("criminal_count", 0))
+	var devotion: float = float(data.get("faith_devotion", 0.5))
+	var reason: String = data.get("reason", "Petitioning Audience")
+
+	var item: PanelContainer = PanelContainer.new()
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color(0.18, 0.08, 0.12, 0.95)
+	style.border_color = Color(1.0, 0.45, 0.2, 1.0)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 10
+	style.content_margin_top = 8
+	style.content_margin_right = 10
+	style.content_margin_bottom = 8
+	item.add_theme_stylebox_override("panel", style)
+
+	var vbox: VBoxContainer = VBoxContainer.new()
+	item.add_child(vbox)
+
+	var header: Label = Label.new()
+	header.text = "🐉 TWIN DRAGON GATE: PALACE ENTRY PETITION"
+	header.modulate = Color(1.0, 0.75, 0.3, 1.0)
+	vbox.add_child(header)
+
+	var info: Label = Label.new()
+	info.text = "Petitioner: %s [%s • %s]\nDevotion: %.2f | Prior Crimes: %d\nReason: %s" % [
+		agent_name, race_name, title_str, devotion, crimes, reason
+	]
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(info)
+
+	var hbox: HBoxContainer = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	vbox.add_child(hbox)
+
+	var btn_grant: Button = Button.new()
+	btn_grant.text = "✔ Grant Entry"
+	btn_grant.modulate = Color(0.3, 1.0, 0.5, 1.0)
+	btn_grant.pressed.connect(func():
+		var bridge: Node = get_node_or_null("/root/WsBridgeClient")
+		if bridge and bridge.has_method("send_palace_decision"):
+			bridge.send_palace_decision(req_id, "GRANT")
+		btn_grant.disabled = true
+		btn_grant.text = "Granted"
+		for c in hbox.get_children():
+			if c != btn_grant and c is Button:
+				c.disabled = true
+	)
+	hbox.add_child(btn_grant)
+
+	var btn_deny: Button = Button.new()
+	btn_deny.text = "✖ Deny"
+	btn_deny.modulate = Color(1.0, 0.4, 0.4, 1.0)
+	btn_deny.pressed.connect(func():
+		var bridge: Node = get_node_or_null("/root/WsBridgeClient")
+		if bridge and bridge.has_method("send_palace_decision"):
+			bridge.send_palace_decision(req_id, "DENY")
+		btn_deny.disabled = true
+		btn_deny.text = "Denied"
+		for c in hbox.get_children():
+			if c != btn_deny and c is Button:
+				c.disabled = true
+	)
+	hbox.add_child(btn_deny)
+
+	var btn_escort: Button = Button.new()
+	btn_escort.text = "⚔ Escort Out"
+	btn_escort.modulate = Color(1.0, 0.8, 0.2, 1.0)
+	btn_escort.pressed.connect(func():
+		var bridge: Node = get_node_or_null("/root/WsBridgeClient")
+		if bridge and bridge.has_method("send_palace_decision"):
+			bridge.send_palace_decision(req_id, "ESCORT")
+		btn_escort.disabled = true
+		btn_escort.text = "Escorted"
+		for c in hbox.get_children():
+			if c != btn_escort and c is Button:
+				c.disabled = true
+	)
+	hbox.add_child(btn_escort)
+
+	# Insert at top of feed
+	message_container.add_child(item)
+	message_container.move_child(item, 0)
+	if council_drawer and not council_drawer.visible:
+		council_drawer.visible = true
+

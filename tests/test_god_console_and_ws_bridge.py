@@ -151,6 +151,7 @@ async def test_10000_agent_binary_stream_benchmark() -> None:
 
     # Benchmark serialization latency
     timings = []
+    binary_payload = b""
     for _ in range(10):
         t0 = time.perf_counter()
         binary_payload = bridge.pack_binary_frame()
@@ -222,6 +223,9 @@ async def test_zero_direct_sqlite_and_live_two_book_edits(tmp_path: Path) -> Non
             assert resp1["type"] == "GOD_LIBRARY_EDIT_RESPONSE"
             assert resp1["status"] == "SUCCESS"
 
+            sync1 = json.loads(await ws.recv())
+            assert sync1["type"] == "BOOK_STATE_SYNC"
+
             # Check Python RAM updated immediately
             entries = engine.governance_engine.library_entries
             assert "lib_DIVINE_PHYSICS" in entries
@@ -262,11 +266,11 @@ async def test_zero_direct_sqlite_and_live_two_book_edits(tmp_path: Path) -> Non
             assert resp2["type"] == "GOD_CODEX_APPROVE_RESPONSE"
             assert resp2["status"] == "SUCCESS"
 
+            sync2 = json.loads(await ws.recv())
+            assert sync2["type"] == "BOOK_STATE_SYNC"
+
             # Check live engine parameter override applied in RAM
-            assert (
-                engine.governance_engine.live_engine_overrides["DIVINE_TRUCE_DURATION"]
-                == 120.0
-            )
+            assert engine.governance_engine.live_engine_overrides["DIVINE_TRUCE_DURATION"] == 120.0
 
             # Step C: Malformed JSON frame handling
             initial_healer_drops = engine.healer.get_fault_count(

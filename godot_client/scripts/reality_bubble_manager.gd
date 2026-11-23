@@ -68,11 +68,16 @@ func _on_bubble_sync_received(data: Dictionary) -> void:
 
 
 func sync_bubble_agents(agent_list: Array) -> void:
+	TerrainHeightSampler.ensure_loaded()
 	var count: int = min(agent_list.size(), POOL_SIZE)
 	_active_actors_by_id.clear()
 
 	for i in range(count):
 		var agent_data: Dictionary = agent_list[i]
+		var px: float = float(agent_data.get("x", 0.0))
+		var pz: float = float(agent_data.get("z", 0.0))
+		agent_data["y"] = TerrainHeightSampler.get_height(px, pz)
+
 		var actor: Node3D = _actor_pool[i]
 		actor.bind_agent_data(agent_data)
 		var aid: String = agent_data.get("agent_id", "")

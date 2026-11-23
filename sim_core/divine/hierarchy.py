@@ -9,7 +9,14 @@ Follows DIVINE_HIERARCHY_SPEC.md Sections 1, 3, and 4.
 
 from __future__ import annotations
 
-from sim_core.schemas import DeitySlot, DivineEntityRecord, DivinePersonality, RaceId
+from sim_core.brains.personality import MoodState, PersonalityVector
+from sim_core.schemas import (
+    DeitySlot,
+    DivineEntityRecord,
+    DivinePersonality,
+    RaceId,
+    RacialGodMotherSlot,
+)
 
 INTERVENTION_SPECS: dict[str, dict[str, float | int]] = {
     "SOOTHE_OR_HEAL": {"cost": 25.0, "cooldown_ticks": 120},
@@ -19,7 +26,7 @@ INTERVENTION_SPECS: dict[str, dict[str, float | int]] = {
     "BLESS_ORACLE": {"cost": 200.0, "cooldown_ticks": 75600},
 }
 
-RACE_TO_DEITY_SLOT: dict[RaceId, DeitySlot] = {
+RACE_TO_DEITY_SLOT: dict[RaceId, RacialGodMotherSlot] = {
     "HUMAN": "gm_human",
     "ELF": "gm_elf",
     "DRAGON": "gm_dragon",
@@ -42,6 +49,19 @@ class DivineHierarchyManager:
                 personality=DivinePersonality(
                     compassion=0.8, restraint=0.8, pride=0.2, protective_fury=0.4, diplomacy=0.9
                 ),
+                personality_vector=PersonalityVector(
+                    courage=0.7,
+                    empathy=0.85,
+                    ambition=0.6,
+                    discipline=0.85,
+                    curiosity=0.8,
+                    devotion=0.9,
+                    honesty=0.9,
+                    out_group_trust=0.75,
+                    caution=0.7,
+                    pride=0.4,
+                ),
+                mood=MoodState(calm=0.85, inspired=0.6),
             ),
             "gm_human": DivineEntityRecord(
                 slot="gm_human",
@@ -56,6 +76,19 @@ class DivineHierarchyManager:
                     protective_fury=0.50,
                     pride=0.55,
                 ),
+                personality_vector=PersonalityVector(
+                    courage=0.65,
+                    empathy=0.7,
+                    ambition=0.7,
+                    discipline=0.65,
+                    curiosity=0.7,
+                    devotion=0.8,
+                    honesty=0.7,
+                    out_group_trust=0.65,
+                    caution=0.55,
+                    pride=0.55,
+                ),
+                mood=MoodState(calm=0.7, inspired=0.5),
             ),
             "gm_elf": DivineEntityRecord(
                 slot="gm_elf",
@@ -70,6 +103,19 @@ class DivineHierarchyManager:
                     diplomacy=0.65,
                     protective_fury=0.55,
                 ),
+                personality_vector=PersonalityVector(
+                    courage=0.55,
+                    empathy=0.65,
+                    ambition=0.5,
+                    discipline=0.85,
+                    curiosity=0.85,
+                    devotion=0.8,
+                    honesty=0.8,
+                    out_group_trust=0.55,
+                    caution=0.75,
+                    pride=0.7,
+                ),
+                mood=MoodState(calm=0.8, inspired=0.6),
             ),
             "gm_dragon": DivineEntityRecord(
                 slot="gm_dragon",
@@ -84,6 +130,19 @@ class DivineHierarchyManager:
                     compassion=0.45,
                     diplomacy=0.50,
                 ),
+                personality_vector=PersonalityVector(
+                    courage=0.9,
+                    empathy=0.45,
+                    ambition=0.8,
+                    discipline=0.75,
+                    curiosity=0.6,
+                    devotion=0.75,
+                    honesty=0.85,
+                    out_group_trust=0.4,
+                    caution=0.7,
+                    pride=0.85,
+                ),
+                mood=MoodState(calm=0.75, inspired=0.4),
             ),
             "gm_beasthuman": DivineEntityRecord(
                 slot="gm_beasthuman",
@@ -98,6 +157,19 @@ class DivineHierarchyManager:
                     pride=0.70,
                     diplomacy=0.55,
                 ),
+                personality_vector=PersonalityVector(
+                    courage=0.8,
+                    empathy=0.7,
+                    ambition=0.6,
+                    discipline=0.6,
+                    curiosity=0.65,
+                    devotion=0.8,
+                    honesty=0.75,
+                    out_group_trust=0.5,
+                    caution=0.5,
+                    pride=0.65,
+                ),
+                mood=MoodState(calm=0.65, inspired=0.5),
             ),
             "gm_demon": DivineEntityRecord(
                 slot="gm_demon",
@@ -112,6 +184,19 @@ class DivineHierarchyManager:
                     compassion=0.40,
                     diplomacy=0.50,
                 ),
+                personality_vector=PersonalityVector(
+                    courage=0.85,
+                    empathy=0.4,
+                    ambition=0.85,
+                    discipline=0.7,
+                    curiosity=0.75,
+                    devotion=0.9,
+                    honesty=0.6,
+                    out_group_trust=0.35,
+                    caution=0.75,
+                    pride=0.8,
+                ),
+                mood=MoodState(calm=0.6, inspired=0.5),
             ),
         }
 

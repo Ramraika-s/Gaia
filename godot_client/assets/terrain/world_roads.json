@@ -1,0 +1,90 @@
+{
+  "ring_road": {
+    "radius": 1150.0,
+    "width": 10.0,
+    "connected_cities": [
+      "sylvanor",
+      "aurelia",
+      "fenris_hold",
+      "malakor",
+      "drakonis_spire"
+    ]
+  },
+  "radial_highways": [
+    {
+      "name": "Imperial_Highway_Sylvanor",
+      "city": "Sylvanor",
+      "start": {
+        "x": 360.0,
+        "y": 24.0,
+        "z": 0.0
+      },
+      "end": {
+        "x": 900.0,
+        "y": 28.0,
+        "z": 0.0
+      },
+      "width": 10.0
+    },
+    {
+      "name": "Imperial_Highway_Aurelia",
+      "city": "Aurelia",
+      "start": {
+        "x": 111.2,
+        "y": 24.0,
+        "z": 342.4
+      },
+      "end": {
+        "x": 278.1,
+        "y": 18.0,
+        "z": 856.0
+      },
+      "width": 10.0
+    },
+    {
+      "name": "Imperial_Highway_Fenris Hold",
+      "city": "Fenris Hold",
+      "start": {
+        "x": -291.2,
+        "y": 24.0,
+        "z": 211.6
+      },
+      "end": {
+        "x": -728.1,
+        "y": 24.0,
+        "z": 529.0
+      },
+      "width": 10.0
+    },
+    {
+      "name": "Imperial_Highway_Malakor",
+      "city": "Malakor",
+      "start": {
+        "x": -291.2,
+        "y": 24.0,
+        "z": -211.6
+      },
+      "end": {
+        "x": -728.1,
+        "y": 42.0,
+        "z": -529.0
+      },
+      "width": 10.0
+    },
+    {
+      "name": "Imperial_Highway_Drakonis Spire",
+      "city": "Drakonis Spire",
+      "start": {
+        "x": 111.2,
+        "y": 24.0,
+        "z": -342.4
+      },
+      "end": {
+        "x": 278.1,
+        "y": 68.0,
+        "z": -856.0
+      },
+      "width": 10.0
+    }
+  ]
+}

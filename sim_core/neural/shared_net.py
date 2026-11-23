@@ -11,8 +11,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from sim_core.schemas import Stage
-
 NUM_SHARED_INPUTS = 32
 NUM_ACTIONS = 20
 ALPHA_MOD = 1.25
@@ -29,7 +27,7 @@ STAGE_MASK_TENSOR[1, 0:10] = True
 STAGE_MASK_TENSOR[2, :] = True
 STAGE_MASK_TENSOR[3, :] = True
 
-STAGE_NAME_TO_IDX: dict[Stage | str, int] = {
+STAGE_NAME_TO_IDX: dict[str, int] = {
     "INFANT": 0,
     "CHILD": 1,
     "ADULT": 2,
@@ -47,6 +45,8 @@ class SharedSkillNet(nn.Module):
       Policy Head: Linear(64, 20) -> L_shared
       Value Head:  Linear(64, 1)  -> V(s)
     """
+
+    stage_masks: torch.Tensor
 
     def __init__(self, input_dim: int = NUM_SHARED_INPUTS, action_dim: int = NUM_ACTIONS) -> None:
         super().__init__()

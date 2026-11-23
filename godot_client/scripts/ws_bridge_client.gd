@@ -20,6 +20,12 @@ signal god_library_edit_response_received(data: Dictionary)
 signal god_codex_approve_response_received(data: Dictionary)
 signal god_codex_reject_response_received(data: Dictionary)
 signal god_codex_edit_response_received(data: Dictionary)
+signal palace_entry_requested(payload: Dictionary)
+signal palace_decision_announced(payload: Dictionary)
+signal building_sync_received(buildings: Array, cities: Array)
+signal building_updated(building: Dictionary)
+signal deity_sync_received(deities: Array)
+signal dialogue_response_received(data: Dictionary)
 
 const BRIDGE_URL: String = "ws://127.0.0.1:8765"
 const RECONNECT_DELAY: float = 2.0
@@ -133,6 +139,18 @@ func _dispatch_json_event(dict: Dictionary) -> void:
 			god_codex_reject_response_received.emit(dict)
 		"GOD_CODEX_EDIT_RESPONSE":
 			god_codex_edit_response_received.emit(dict)
+		"PALACE_ENTRY_REQUEST":
+			palace_entry_requested.emit(dict)
+		"PALACE_DECISION_ANNOUNCED":
+			palace_decision_announced.emit(dict)
+		"BUILDING_SYNC":
+			building_sync_received.emit(dict.get("buildings", []), dict.get("cities", []))
+		"BUILDING_UPDATE":
+			building_updated.emit(dict.get("building", {}))
+		"DEITY_SYNC":
+			deity_sync_received.emit(dict.get("deities", []))
+		"DIALOGUE_RESPONSE":
+			dialogue_response_received.emit(dict)
 
 
 func _send_god_state() -> void:
@@ -235,3 +253,26 @@ func request_book_state_sync() -> void:
 
 func is_bridge_connected() -> bool:
 	return _connected
+
+
+func send_palace_decision(request_id: String, decision: String, duration: int = 600) -> void:
+	var payload: Dictionary = {
+		"type": "GOD_PALACE_DECISION",
+		"request_id": request_id,
+		"decision": decision,
+		"duration": duration,
+		"timestamp": Time.get_unix_time_from_system(),
+	}
+	send_json(payload)
+
+
+func send_dialogue_request(target_type: String, target_id: String, message: String, order: String = "") -> void:
+	var payload: Dictionary = {
+		"type": "DIALOGUE_REQUEST",
+		"target_type": target_type,
+		"target_id": target_id,
+		"message": message,
+		"order": order,
+		"timestamp": Time.get_unix_time_from_system(),
+	}
+	send_json(payload)

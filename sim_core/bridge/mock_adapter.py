@@ -28,6 +28,7 @@ class MockWorldAdapter(WorldAdapter):
         }
         self.binary_frames_count: int = 0
         self.last_binary_frame_bytes: bytes = b""
+        self.building_updates: list[dict[str, Any]] = []
 
     def spawn_agent(self, agent_id: str, slot_idx: int, metadata: dict[str, Any]) -> None:
         self.spawned_agents[agent_id] = {
@@ -54,26 +55,43 @@ class MockWorldAdapter(WorldAdapter):
     def sync_bubble(self, pooled_agents: list[dict[str, Any]]) -> None:
         self.bubble_agents = list(pooled_agents)
 
+    def sync_deities(self, deities: list[dict[str, Any]]) -> None:
+        self.emit_event("DEITY_SYNC", {"deities": deities})
+
     def sync_weather_time(
         self,
         day: int,
         time_of_day: float,
         season_progress: float,
         weather: str = "CLEAR",
+        weather_details: dict[str, Any] | None = None,
     ) -> None:
         self.weather_time = {
             "day": day,
             "time_of_day": time_of_day,
             "season_progress": season_progress,
             "weather": weather,
+            "weather_details": weather_details or {},
         }
 
     def emit_event(self, event_type: str, payload: dict[str, Any]) -> None:
         self.events.append((event_type, payload))
 
+    def broadcast_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        self.emit_event(event_type, payload)
+
     def broadcast_binary_frame(self, data: bytes) -> None:
         self.binary_frames_count += 1
         self.last_binary_frame_bytes = data
+
+    def sync_building_update(self, building: dict[str, Any] | Any) -> None:
+        bld_dict = (
+            building
+            if isinstance(building, dict)
+            else (building.model_dump() if hasattr(building, "model_dump") else dict(building))
+        )
+        self.building_updates.append(bld_dict)
+        self.emit_event("BUILDING_UPDATE", {"building": bld_dict})
 
     def clear(self) -> None:
         """Resets all captured buffers."""
@@ -82,5 +100,6 @@ class MockWorldAdapter(WorldAdapter):
         self.positions.clear()
         self.bubble_agents.clear()
         self.events.clear()
+        self.building_updates.clear()
         self.binary_frames_count = 0
         self.last_binary_frame_bytes = b""

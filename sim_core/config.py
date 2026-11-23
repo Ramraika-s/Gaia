@@ -32,9 +32,9 @@ TICKS_PER_SEASON: Final[int] = DAYS_PER_SEASON * TICKS_PER_GAME_DAY  # 75,600 ti
 TICKS_PER_YEAR: Final[int] = DAYS_PER_YEAR * TICKS_PER_GAME_DAY  # 302,400 ticks
 
 # Cognitive Multi-Tier LOD
-LOD_TIER_0_HZ: Final[float] = 2.0    # In Reality Bubble (120-160m): 2 Hz
-LOD_TIER_1_HZ: Final[float] = 1.0    # Distant awake agents: 1 Hz
-LOD_TIER_2_HZ: Final[float] = 0.25   # Distant sleeping / sheltered idle: 0.25 Hz
+LOD_TIER_0_HZ: Final[float] = 2.0  # In Reality Bubble (120-160m): 2 Hz
+LOD_TIER_1_HZ: Final[float] = 1.0  # Distant awake agents: 1 Hz
+LOD_TIER_2_HZ: Final[float] = 0.25  # Distant sleeping / sheltered idle: 0.25 Hz
 
 # Reality Bubble parameters
 REALITY_BUBBLE_RADIUS_METERS: Final[float] = 140.0
@@ -55,18 +55,19 @@ SOFT_RAM_WATERMARK_PERCENT: Final[float] = 75.0
 # 3. Spatial World & Parcel Boundaries
 # ==============================================================================
 
-# 10,000m x 10,000m world centered around (0, 0)
-WORLD_SIZE_X: Final[float] = 10000.0
-WORLD_SIZE_Z: Final[float] = 10000.0
-WORLD_MIN_X: Final[float] = -5000.0
-WORLD_MAX_X: Final[float] = 5000.0
-WORLD_MIN_Z: Final[float] = -5000.0
-WORLD_MAX_Z: Final[float] = 5000.0
+# 8,000m x 8,000m world centered around (0, 0)
+WORLD_SIZE_X: Final[float] = 8000.0
+WORLD_SIZE_Z: Final[float] = 8000.0
+WORLD_MIN_X: Final[float] = -4000.0
+WORLD_MAX_X: Final[float] = 4000.0
+WORLD_MIN_Z: Final[float] = -4000.0
+WORLD_MAX_Z: Final[float] = 4000.0
+SEA_LEVEL: Final[float] = 0.0
 
 # Explicit 16x16m parcel chunk grid
 PARCEL_SIZE: Final[float] = 16.0
-PARCEL_COUNT_X: Final[int] = int(WORLD_SIZE_X / PARCEL_SIZE)  # 625 parcels
-PARCEL_COUNT_Z: Final[int] = int(WORLD_SIZE_Z / PARCEL_SIZE)  # 625 parcels
+PARCEL_COUNT_X: Final[int] = int(WORLD_SIZE_X / PARCEL_SIZE)  # 500 parcels
+PARCEL_COUNT_Z: Final[int] = int(WORLD_SIZE_Z / PARCEL_SIZE)  # 500 parcels
 
 # ==============================================================================
 # 4. Biological Gates & Age Calibration

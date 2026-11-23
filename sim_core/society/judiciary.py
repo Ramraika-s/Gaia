@@ -58,8 +58,12 @@ class JudiciaryEngine:
         self,
         accused_id: str,
         offense_type: Literal[
-            "THEFT", "UNPROVOKED_ATTACK", "VANDALISM",
-            "DEBT_DEFAULT", "TRESPASS", "CONTESTED_COMBAT"
+            "THEFT",
+            "UNPROVOKED_ATTACK",
+            "VANDALISM",
+            "DEBT_DEFAULT",
+            "TRESPASS",
+            "CONTESTED_COMBAT",
         ],
         opened_tick: int,
         settlement_id: str | None = None,

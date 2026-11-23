@@ -1,0 +1,11 @@
+llama.cpp/build/bin/llama-server \
+  -m models/{name}.gguf \
+  -ngl 99 \
+  -c 8192 \
+  -np 1 \
+  -fa on \
+  -ctk q8_0 -ctv q8_0 \
+  -b 2048 -ub 1024 \
+  --jinja \
+  --host 127.0.0.1 \
+  --port {port_no}

@@ -88,8 +88,7 @@ class PropertyManager:
         # Check children
         if not heir:
             living_children = [
-                a for a in all_agents.values()
-                if a.alive and deceased_id in a.parent_ids
+                a for a in all_agents.values() if a.alive and deceased_id in a.parent_ids
             ]
             if living_children:
                 # Prefer adult children, else oldest
@@ -102,7 +101,8 @@ class PropertyManager:
         # Check parents
         if not heir:
             living_parents = [
-                all_agents[pid] for pid in deceased.parent_ids
+                all_agents[pid]
+                for pid in deceased.parent_ids
                 if pid in all_agents and all_agents[pid].alive
             ]
             if living_parents:
@@ -112,7 +112,8 @@ class PropertyManager:
         if not heir and deceased.parent_ids:
             parent_set = set(deceased.parent_ids)
             living_siblings = [
-                a for a in all_agents.values()
+                a
+                for a in all_agents.values()
                 if a.alive and a.agent_id != deceased_id and parent_set.intersection(a.parent_ids)
             ]
             if living_siblings:

@@ -56,19 +56,11 @@ class BatchedAgentSelfNet(nn.Module):
         self.W_ih = nn.Parameter(
             self._init_weight(initial_capacity, NUM_SELF_INPUTS, gru_hidden_x3)
         )
-        self.b_ih = nn.Parameter(
-            torch.zeros((initial_capacity, gru_hidden_x3), device=self.device)
-        )
-        self.W_hh = nn.Parameter(
-            self._init_weight(initial_capacity, HIDDEN_DIM, gru_hidden_x3)
-        )
-        self.b_hh = nn.Parameter(
-            torch.zeros((initial_capacity, gru_hidden_x3), device=self.device)
-        )
+        self.b_ih = nn.Parameter(torch.zeros((initial_capacity, gru_hidden_x3), device=self.device))
+        self.W_hh = nn.Parameter(self._init_weight(initial_capacity, HIDDEN_DIM, gru_hidden_x3))
+        self.b_hh = nn.Parameter(torch.zeros((initial_capacity, gru_hidden_x3), device=self.device))
 
-        self.W_out = nn.Parameter(
-            self._init_weight(initial_capacity, HIDDEN_DIM, NUM_OUTPUT_HEADS)
-        )
+        self.W_out = nn.Parameter(self._init_weight(initial_capacity, HIDDEN_DIM, NUM_OUTPUT_HEADS))
         self.b_out = nn.Parameter(
             torch.zeros((initial_capacity, NUM_OUTPUT_HEADS), device=self.device)
         )
@@ -110,9 +102,9 @@ class BatchedAgentSelfNet(nn.Module):
             self.b_out = nn.Parameter(torch.cat([self.b_out.data, new_b_out], dim=0))
             self.H = torch.cat([self.H, new_h], dim=0)
 
-        # Add new slots to free pool (in reverse so lower indices pop first)
-        for s in range(new_capacity - 1, old_capacity - 1, -1):
-            self.free_slots.append(s)
+        # Add new slots to free pool (prepended in descending order so lower indices pop first)
+        new_slots = list(range(new_capacity - 1, old_capacity - 1, -1))
+        self.free_slots = new_slots + self.free_slots
 
         self.capacity = new_capacity
         return new_capacity
@@ -140,7 +132,7 @@ class BatchedAgentSelfNet(nn.Module):
                 for param in (self.W_ih, self.b_ih, self.W_hh, self.b_hh, self.W_out, self.b_out):
                     p1 = param.data[parent1_slot]
                     p2 = param.data[parent2_slot]
-                    mask = (torch.rand_like(p1) < 0.5)
+                    mask = torch.rand_like(p1) < 0.5
                     child_p = torch.where(mask, p1, p2)
                     if mutation_std > 0.0:
                         child_p = child_p + torch.randn_like(child_p) * mutation_std
@@ -196,10 +188,13 @@ class BatchedAgentSelfNet(nn.Module):
             use_slice = True
             start_idx = 0
             end_idx = n
-        elif isinstance(slot_indices, slice):
-            use_slice = True
-            start_idx = slot_indices.start or 0
-            end_idx = slot_indices.stop or n
+        elif isinstance(slot_indices, (list, tuple)) and n > 0:
+            first = int(slot_indices[0])
+            last = int(slot_indices[-1])
+            if last - first == n - 1 and (n == 1 or int(slot_indices[1]) == first + 1):
+                use_slice = True
+                start_idx = first
+                end_idx = last + 1
         elif isinstance(slot_indices, torch.Tensor) and n > 0:
             first = int(slot_indices[0].item())
             last = int(slot_indices[-1].item())
@@ -251,7 +246,7 @@ class BatchedAgentSelfNet(nn.Module):
                 bad_batch_indices = [bad_batch_indices]
 
             for b_idx in bad_batch_indices:
-                if use_slice:
+                if use_slice or slot_indices is None:
                     bad_slot = start_idx + b_idx
                 else:
                     bad_slot = int(slot_indices[b_idx].item())

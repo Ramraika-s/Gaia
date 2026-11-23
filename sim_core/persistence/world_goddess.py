@@ -61,7 +61,7 @@ class WorldGoddessCritic:
                 return self._reject(proposal, "Rejected: mother already pregnant")
 
             # Cross-species conception roll (50% chance)
-            is_cross_species = (p1_race != p2_race)
+            is_cross_species = p1_race != p2_race
             if is_cross_species:
                 roll = payload.get("conception_roll")
                 if roll is not None and roll > 0.50:
@@ -203,9 +203,7 @@ class WorldGoddessCritic:
             if not is_scripture and proficiency < 0.70:
                 return self._reject(proposal, "Rejected: insufficient mastery (<0.70)")
 
-            return self._approve(
-                proposal, "World Library entry approved by Elders and God-Mothers"
-            )
+            return self._approve(proposal, "World Library entry approved by Elders and God-Mothers")
 
         if kind == "LIBRARY_VOTE":
             voter_type = payload.get("voter_type", "ELDER")

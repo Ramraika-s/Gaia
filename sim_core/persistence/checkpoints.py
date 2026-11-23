@@ -230,7 +230,7 @@ class WorldGoddessCheckpointManager:
 
             if current_db_sha == manifest.db_sha256 and current_pt_sha == manifest.pt_sha256:
                 # Valid snapshot found!
-                is_rewind = (idx > 0)
+                is_rewind = idx > 0
                 # Restore live database from verified snapshot using SQLite backup API
                 if live_db.exists():
                     src = sqlite3.connect(db_p)

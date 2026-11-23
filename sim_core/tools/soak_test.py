@@ -23,6 +23,7 @@ from pathlib import Path
 from sim_core.bridge.mock_adapter import MockWorldAdapter
 from sim_core.config import TICKS_PER_GAME_DAY
 from sim_core.engine import SimulationEngine
+from sim_core.races import BeasthumanSubLineage
 from sim_core.schemas import Gender, RaceId
 
 
@@ -71,7 +72,12 @@ def run_soak_test(
         print(f"[*] Spawning {num_agents} agents across 5 races...")
         races: list[RaceId] = ["HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"]
         genders: list[Gender] = ["BOY", "GIRL"]
-        beasthuman_sublineages = ["CAT_KIN", "WOLF_KIN", "DWARF", "BARBARIAN"]
+        beasthuman_sublineages: list[BeasthumanSubLineage] = [
+            "CAT_KIN",
+            "WOLF_KIN",
+            "DWARF",
+            "BARBARIAN",
+        ]
 
         for i in range(num_agents):
             race = races[i % 5]
@@ -82,6 +88,7 @@ def run_soak_test(
             gx = ((i % 50) - 25) * 32.0
             gz = ((i // 50) - 15) * 32.0
             from sim_core.schemas import Vec3
+
             pos_vec = Vec3(x=gx, y=0.0, z=gz)
 
             engine.spawn_agent(
@@ -130,9 +137,9 @@ def run_soak_test(
 
             # Check mid-day disk protection (before day boundary)
             if t % TICKS_PER_GAME_DAY != 0:
-                assert (
-                    len(list(checkpoints_dir.glob("*.pt"))) == 0
-                ), f"Mid-day disk write detected at tick {t}!"
+                assert len(list(checkpoints_dir.glob("*.pt"))) == 0, (
+                    f"Mid-day disk write detected at tick {t}!"
+                )
 
         elapsed = time.perf_counter() - t_start
         rate_hz = ticks / max(0.001, elapsed)
@@ -145,9 +152,7 @@ def run_soak_test(
         # ---------------------------------------------------------------------
         # 4. Credit Conservation Verification
         # ---------------------------------------------------------------------
-        final_credits = engine.bank.reserve_credits + sum(
-            a.credits for a in engine.agents.values()
-        )
+        final_credits = engine.bank.reserve_credits + sum(a.credits for a in engine.agents.values())
         drift = abs(final_credits - initial_credits)
         print(
             f"[*] Verifying credit conservation: Initial={initial_credits:.2f}, "

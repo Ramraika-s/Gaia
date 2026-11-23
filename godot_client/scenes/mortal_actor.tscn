@@ -53,6 +53,10 @@ transparency = 1
 shading_mode = 0
 albedo_color = Color(0.9, 0.15, 0.1, 0.45)
 
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_mortal"]
+radius = 0.42
+height = 1.75
+
 [node name="MortalActor" type="Node3D"]
 script = ExtResource("1_actor")
 
@@ -123,3 +127,24 @@ font_size = 20
 outline_modulate = Color(0.05, 0.05, 0.08, 0.8)
 text = "Citizen Founder
 [HUMAN • ADULT]"
+
+[node name="SpeechBubbleLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.7, 0)
+visible = false
+billboard = 1
+outline_render_priority = 2
+outline_size = 8
+font_size = 22
+modulate = Color(1, 0.95, 0.7, 1)
+outline_modulate = Color(0.05, 0.05, 0.1, 0.95)
+autowrap_mode = 2
+width = 380.0
+text = "Hello traveler!"
+
+[node name="ColliderBody" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.875, 0)
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ColliderBody"]
+shape = SubResource("CapsuleShape3D_mortal")

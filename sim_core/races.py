@@ -6,7 +6,7 @@ for the 4 distinct races (HUMAN, ELF, DRAGON, BEASTHUMAN) and 2 biological gende
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -213,14 +213,16 @@ def get_race_profile(
     sub_lineage: BeasthumanSubLineage | None = None,
 ) -> RaceProfile:
     """Fetches the corresponding RaceProfile from the registry."""
-    key = (race, sub_lineage)
+    valid_races = {"HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"}
+    r_id: RaceId = cast(RaceId, race) if race in valid_races else "HUMAN"
+    key = (r_id, sub_lineage)
     if key in RACE_REGISTRY:
         return RACE_REGISTRY[key]
-    if (race, None) in RACE_REGISTRY:
-        return RACE_REGISTRY[(race, None)]
-    if race in RACE_REGISTRY:
-        return RACE_REGISTRY[race]
+    if (r_id, None) in RACE_REGISTRY:
+        return RACE_REGISTRY[(r_id, None)]
+    if r_id in RACE_REGISTRY:
+        return RACE_REGISTRY[r_id]
     # Fallback to default sub-lineage or base race
-    if race == "BEASTHUMAN":
+    if r_id == "BEASTHUMAN":
         return RACE_REGISTRY[("BEASTHUMAN", "CAT_KIN")]
     return RACE_REGISTRY[("HUMAN", None)]

@@ -22,9 +22,9 @@ def run_benchmark(num_agents: int = 10000, num_steps: int = 50) -> dict[str, flo
     Executes the neural tensor benchmark over num_agents for num_steps.
     Returns metrics dictionary with timings and RAM usage.
     """
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"GAIA NEURAL BENCHMARK: {num_agents:,} AGENTS | {num_steps} STEPS")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     device = torch.device("cpu")
     shared_net = SharedSkillNet().to(device)
@@ -36,8 +36,10 @@ def run_benchmark(num_agents: int = 10000, num_steps: int = 50) -> dict[str, flo
     t_alloc = (time.perf_counter() - t_alloc_start) * 1000.0
 
     capacity = self_net.capacity
-    print(f"[SLAB_ALLOCATION] Allocated {num_agents:,} agents into capacity {capacity:,} "
-          f"in {t_alloc:.2f} ms.")
+    print(
+        f"[SLAB_ALLOCATION] Allocated {num_agents:,} agents into capacity {capacity:,} "
+        f"in {t_alloc:.2f} ms."
+    )
 
     # 2. RAM Profiling
     self_net_bytes = self_net.memory_bytes()
@@ -45,8 +47,10 @@ def run_benchmark(num_agents: int = 10000, num_steps: int = 50) -> dict[str, flo
     total_bytes = self_net_bytes + shared_net_bytes
     total_mb = total_bytes / (1024.0 * 1024.0)
 
-    print(f"[RAM_USAGE] BatchedAgentSelfNet: {self_net_bytes / (1024 * 1024):.2f} MB | "
-          f"SharedSkillNet: {shared_net_bytes / 1024:.2f} KB | Total: {total_mb:.2f} MB")
+    print(
+        f"[RAM_USAGE] BatchedAgentSelfNet: {self_net_bytes / (1024 * 1024):.2f} MB | "
+        f"SharedSkillNet: {shared_net_bytes / 1024:.2f} KB | Total: {total_mb:.2f} MB"
+    )
 
     # 3. Warm-up step
     slot_tensor = torch.tensor(allocated_slots, dtype=torch.long, device=device)
@@ -92,9 +96,11 @@ def run_benchmark(num_agents: int = 10000, num_steps: int = 50) -> dict[str, flo
     sorted_times = sorted(step_times_ms)
     p95_ms = sorted_times[int(0.95 * len(sorted_times))]
 
-    print(f"[PERFORMANCE] Avg: {avg_ms:.2f} ms/step | Min: {min_ms:.2f} ms | "
-          f"Max: {max_ms:.2f} ms | P95: {p95_ms:.2f} ms")
-    print(f"{'='*70}\n")
+    print(
+        f"[PERFORMANCE] Avg: {avg_ms:.2f} ms/step | Min: {min_ms:.2f} ms | "
+        f"Max: {max_ms:.2f} ms | P95: {p95_ms:.2f} ms"
+    )
+    print(f"{'=' * 70}\n")
 
     return {
         "num_agents": float(num_agents),

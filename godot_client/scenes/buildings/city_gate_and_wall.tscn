@@ -1,0 +1,122 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/banner_white.gltf" id="1_banner"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall_arched.gltf" id="2_wall_arch"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_masonry"]
+albedo_color = Color(0.68, 0.69, 0.72, 1)
+roughness = 0.75
+metallic = 0.05
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trim"]
+albedo_color = Color(0.38, 0.4, 0.45, 1)
+roughness = 0.6
+metallic = 0.1
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_tower"]
+size = Vector3(4.5, 9, 4.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_tower"]
+material = SubResource("StandardMaterial3D_masonry")
+size = Vector3(4.5, 9, 4.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_bridge"]
+size = Vector3(6, 1.2, 4.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_bridge"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(6, 1.2, 4.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_curtain"]
+size = Vector3(14, 5.5, 2.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_curtain"]
+material = SubResource("StandardMaterial3D_masonry")
+size = Vector3(14, 5.5, 2.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_parapet"]
+size = Vector3(6, 1.2, 0.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_parapet"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(6, 1.2, 0.5)
+
+[node name="CityGateAndWall" type="Node3D"]
+
+[node name="WestTower" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.25, 4.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WestTower"]
+shape = SubResource("BoxShape3D_tower")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="WestTower"]
+mesh = SubResource("BoxMesh_tower")
+
+[node name="EastTower" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.25, 4.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="EastTower"]
+shape = SubResource("BoxShape3D_tower")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="EastTower"]
+mesh = SubResource("BoxMesh_tower")
+
+[node name="GateBridge" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GateBridge"]
+shape = SubResource("BoxShape3D_bridge")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="GateBridge"]
+mesh = SubResource("BoxMesh_bridge")
+
+[node name="ParapetFront" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.7, 2)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ParapetFront"]
+shape = SubResource("BoxShape3D_parapet")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="ParapetFront"]
+mesh = SubResource("BoxMesh_parapet")
+
+[node name="ParapetBack" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.7, -2)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ParapetBack"]
+shape = SubResource("BoxShape3D_parapet")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="ParapetBack"]
+mesh = SubResource("BoxMesh_parapet")
+
+[node name="CurtainWallLeft" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14.5, 2.75, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CurtainWallLeft"]
+shape = SubResource("BoxShape3D_curtain")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="CurtainWallLeft"]
+mesh = SubResource("BoxMesh_curtain")
+
+[node name="CurtainWallRight" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 2.75, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CurtainWallRight"]
+shape = SubResource("BoxShape3D_curtain")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="CurtainWallRight"]
+mesh = SubResource("BoxMesh_curtain")
+
+[node name="BannerL" parent="." instance=ExtResource("1_banner")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, -3.2, 3.5, 2.3)
+
+[node name="BannerR" parent="." instance=ExtResource("1_banner")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 3.2, 3.5, 2.3)
+
+[node name="GatePlaque" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.6, 2.35)
+billboard = 1
+font_size = 36
+modulate = Color(1, 0.85, 0.35, 1)
+outline_size = 6
+outline_modulate = Color(0.1, 0.1, 0.1, 0.9)
+text = "IMPERIAL GATE"

@@ -10,7 +10,7 @@ signal library_lectern_entered
 signal library_lectern_exited
 
 const LANDMARK_SCENES: Dictionary = {
-	"sanctum": "res://scenes/landmarks/world_goddess_sanctum.tscn",
+	"palace": "res://scenes/landmarks/grand_divine_palace.tscn",
 	"library": "res://scenes/landmarks/world_library.tscn",
 	"wtc": "res://scenes/landmarks/wtc_market.tscn",
 	"courthouse": "res://scenes/landmarks/courthouse.tscn",
@@ -18,12 +18,13 @@ const LANDMARK_SCENES: Dictionary = {
 }
 
 const LANDMARK_POSITIONS: Dictionary = {
-	"sanctum": Vector3(0.0, 18.5, 0.0),
-	"library": Vector3(100.0, 18.0, 100.0),
-	"wtc": Vector3(-100.0, 18.0, 100.0),
-	"courthouse": Vector3(-100.0, 18.0, -100.0),
-	"cathedral": Vector3(100.0, 18.0, -100.0),
+	"palace": Vector3(0.0, 32.0, 0.0),
+	"library": Vector3(180.0, 24.0, 180.0),
+	"wtc": Vector3(-180.0, 24.0, 180.0),
+	"courthouse": Vector3(-180.0, 24.0, -180.0),
+	"cathedral": Vector3(180.0, 24.0, -180.0),
 }
+
 
 var _landmarks: Dictionary = {}
 var price_board_label: Label3D = null
@@ -38,6 +39,7 @@ func _ready() -> void:
 
 
 func _assemble_landmarks() -> void:
+	TerrainHeightSampler.ensure_loaded()
 	for key in LANDMARK_SCENES:
 		var path: String = LANDMARK_SCENES[key]
 		if not ResourceLoader.exists(path):
@@ -48,12 +50,44 @@ func _assemble_landmarks() -> void:
 		if packed:
 			var inst: Node3D = packed.instantiate()
 			inst.name = key.capitalize()
-			inst.position = LANDMARK_POSITIONS[key]
+			var default_pos: Vector3 = LANDMARK_POSITIONS[key]
+			var ground_y: float = TerrainHeightSampler.get_height(default_pos.x, default_pos.z)
+			var min_y: float = _get_min_mesh_y(inst)
+			if key == "palace":
+
+				inst.position = Vector3(default_pos.x, ground_y, default_pos.z)
+			else:
+				inst.position = Vector3(default_pos.x, ground_y - min_y, default_pos.z)
 			add_child(inst)
 			_landmarks[key] = inst
 
+
 	_bind_subnodes()
-	print("[LandmarksManager] Assembled 5 walk-in institutional landmarks.")
+	print("[LandmarksManager] Assembled 5 walk-in institutional landmarks flush on terrain.")
+
+
+func _get_min_mesh_y(node: Node, parent_y: float = 0.0) -> float:
+	var min_val: float = 0.0
+	var found: bool = false
+
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh:
+		var aabb: AABB = (node as MeshInstance3D).mesh.get_aabb()
+		var y: float = parent_y + aabb.position.y * (node as MeshInstance3D).scale.y
+		min_val = y
+		found = true
+
+	for child in node.get_children():
+		var child_offset: float = parent_y
+		if child is Node3D:
+			child_offset += (child as Node3D).position.y
+		var child_min: float = _get_min_mesh_y(child, child_offset)
+		if not found:
+			min_val = child_min
+			found = true
+		else:
+			min_val = minf(min_val, child_min)
+
+	return min_val if found else 0.0
 
 
 func _bind_subnodes() -> void:
@@ -152,12 +186,14 @@ func set_altar_beacon_active(active: bool, prayer_head: String = "Prayer Head", 
 
 
 func _on_lectern_body_entered(body: Node) -> void:
-	print("[LandmarksManager] Mortal or God approached Library Lectern: ", body.name)
-	library_lectern_entered.emit()
+	if body is CharacterBody3D or body.name == "GodAvatar":
+		print("[LandmarksManager] Mortal or God approached Library Lectern: ", body.name)
+		library_lectern_entered.emit()
 
 
 func _on_lectern_body_exited(body: Node) -> void:
-	library_lectern_exited.emit()
+	if body is CharacterBody3D or body.name == "GodAvatar":
+		library_lectern_exited.emit()
 
 
 func get_landmark(key: String) -> Node3D:

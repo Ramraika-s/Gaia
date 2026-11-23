@@ -16,12 +16,13 @@ from sim_core.schemas import DeitySlot, PrayerIntent
 
 INTENT_PRAYER_GAINS: dict[PrayerIntent, tuple[float, float]] = {
     # intent -> (faith_devotion_delta, divine_energy_generated)
-    "EARNEST": (0.045, 1.5),
-    "CONGREGATIONAL": (0.035, 2.0),
-    "CRISIS": (0.025, 1.0),
+    "EARNEST_VOLUNTARY": (0.045, 1.5),
+    "GRATITUDE": (0.040, 1.2),
+    "CONGREGATIONAL_ALTAR": (0.035, 2.0),
+    "CRISIS_PLEA": (0.025, 1.0),
+    "PARENT_DIRECTED": (0.012, 0.4),
     "OBLIGATION": (0.012, 0.4),
     "PETITION": (0.020, 0.8),
-    "GRATITUDE": (0.040, 1.2),
 }
 
 
@@ -45,7 +46,12 @@ class ReligionManager:
         Returns (success, reason, divine_energy_generated).
         """
         if target_deity_slot == "GOD" or target_deity_slot not in (
-            "world_goddess", "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman"
+            "world_goddess",
+            "gm_human",
+            "gm_elf",
+            "gm_dragon",
+            "gm_beasthuman",
+            "gm_demon",
         ):
             return False, "FORBIDDEN: mortals cannot pray directly to God", 0.0
 
@@ -127,7 +133,7 @@ class ReligionManager:
 
         for p in participants:
             _, _, energy = self.pray(
-                p, target_deity_slot, "CONGREGATIONAL", current_tick, prayer_text
+                p, target_deity_slot, "CONGREGATIONAL_ALTAR", current_tick, prayer_text
             )
             total_energy += energy
 
@@ -152,8 +158,8 @@ class ReligionManager:
             "prayer_head_name": prayer_head.display_name,
             "prayer_head_rank": head_rank,
             "message": f"[{altar_name} ({len(participants)} citizens) | "
-                       f"Prayer Head: {prayer_head.display_name} -> {target_deity_slot}]: "
-                       f'"{prayer_text}"',
+            f"Prayer Head: {prayer_head.display_name} -> {target_deity_slot}]: "
+            f'"{prayer_text}"',
             "total_divine_energy_generated": total_energy,
         }
         self.prayer_log.append(event)

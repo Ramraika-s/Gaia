@@ -126,6 +126,10 @@ class SpatialHashGrid:
 
         return results
 
+    def get_nearby_ids(self, center_x: float, center_z: float, radius: float) -> list[str]:
+        """Convenience alias for query_radius."""
+        return self.query_radius(center_x, center_z, radius)
+
     def query_cell_agents(self, cx: int, cz: int) -> set[str]:
         """Returns the set of agent_ids inside a single parcel cell."""
         return self._cells.get((cx, cz), set()).copy()

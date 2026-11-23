@@ -173,7 +173,7 @@ class LifecycleManager:
 
             agent.distress = max(0.0, min(1.0, agent.distress + distress_delta))
             # Crying triggers at distress >= 0.45
-            agent.crying = (agent.distress >= 0.45)
+            agent.crying = agent.distress >= 0.45
 
         # 7. Dragon Metamorphosis Stamina & Auto-Reversion
         if agent.race == "DRAGON" and agent.dragon_form == "TRUE_DRAGON":
@@ -209,7 +209,7 @@ class LifecycleManager:
 
         old_distress = child.distress
         child.distress = max(0.0, child.distress - reduction)
-        child.crying = (child.distress >= 0.45)
+        child.crying = child.distress >= 0.45
         return old_distress - child.distress
 
     @staticmethod
@@ -255,11 +255,11 @@ class LifecycleManager:
                 return False, "TRUE_DRAGON_MATING_FORBIDDEN: Must be in HUMANOID_DRAGON form", {}
 
         rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
-        is_cross_species = (father.race != mother.race)
+        is_cross_species = father.race != mother.race
 
         # Conception Roll
         conception_chance = CROSS_SPECIES_CONCEPTION_CHANCE if is_cross_species else 1.00
-        conceived = (rng.random() < conception_chance)
+        conceived = rng.random() < conception_chance
 
         mother_profile = RACE_REGISTRY[mother.race]
         base_cooldown = int(1.0 * mother_profile.breeding_cooldown_mult * TICKS_PER_GAME_DAY)
@@ -279,12 +279,16 @@ class LifecycleManager:
         mother.breeding_cooldown = gestation_ticks + base_cooldown
         father.breeding_cooldown = int(0.5 * base_cooldown)
 
-        return True, "CONCEPTION_SUCCESS", {
-            "gestation_ticks": gestation_ticks,
-            "gestation_days": mother_profile.gestation_days,
-            "is_cross_species": is_cross_species,
-            "mother_race": mother.race,
-        }
+        return (
+            True,
+            "CONCEPTION_SUCCESS",
+            {
+                "gestation_ticks": gestation_ticks,
+                "gestation_days": mother_profile.gestation_days,
+                "is_cross_species": is_cross_species,
+                "mother_race": mother.race,
+            },
+        )
 
     @classmethod
     def deliver_child(
@@ -305,7 +309,7 @@ class LifecycleManager:
 
         # Survival Roll
         survival_chance = CROSS_SPECIES_BIRTH_SURVIVAL_CHANCE if is_cross else 1.00
-        survived = (rng.random() < survival_chance)
+        survived = rng.random() < survival_chance
 
         # Reset pregnancy state
         mother.pregnant_ticks_remaining = 0
@@ -323,9 +327,7 @@ class LifecycleManager:
             # 50/50 RNG dominant race
             dominant_race = mother.race if rng.random() < 0.5 else father.race
             secondary_race = father.race if dominant_race == mother.race else mother.race
-            sub_lineage = (
-                mother.sub_lineage if dominant_race == mother.race else father.sub_lineage
-            )
+            sub_lineage = mother.sub_lineage if dominant_race == mother.race else father.sub_lineage
             patron_slot = None  # Mixed-race child uncommitted under Age 10!
         else:
             dominant_race = mother.race
@@ -438,7 +440,7 @@ class LifecycleManager:
             else None
         )
 
-        valid_options = [s for s in (gm_prim, gm_sec) if s is not None]
+        valid_options: list[RacialGodMotherSlot] = [s for s in (gm_prim, gm_sec) if s is not None]
         if not valid_options:
             child.patron_godmother_slot = "gm_human"
             return "DEFAULTED_HUMAN"
@@ -463,7 +465,7 @@ class LifecycleManager:
             return f"WORLD_GODDESS_TIE_BREAK_DECREE: {world_goddess_decision}"
 
         # Default tie fallback
-        fallback = gm_prim or valid_options[0]
+        fallback: RacialGodMotherSlot = gm_prim if gm_prim is not None else valid_options[0]
         child.patron_godmother_slot = fallback
         return f"WORLD_GODDESS_TIE_BREAK_DEFAULT: {fallback}"
 

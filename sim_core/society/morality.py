@@ -20,6 +20,7 @@ RelationshipRole = Literal["STRANGER", "KIN", "ALLY", "RIVAL", "LEADER", "ORACLE
 
 class Relationship(BaseModel):
     """Pairwise relationship between two mortal agents."""
+
     partner_id: str
     trust: float = Field(default=0.0, ge=-1.0, le=1.0)
     affinity: float = Field(default=0.0, ge=-1.0, le=1.0)
@@ -29,6 +30,7 @@ class Relationship(BaseModel):
 
 class AttackEvent(BaseModel):
     """Recent physical attack record stored in RAM for CombatContext attribution."""
+
     attacker_id: str
     victim_id: str
     tick: int
@@ -117,6 +119,19 @@ class MoralityEngine:
         if agent_b not in agent_rels:
             agent_rels[agent_b] = Relationship(partner_id=agent_b)
         return agent_rels[agent_b]
+
+    def record_interaction(
+        self,
+        actor_id: str,
+        target_id: str,
+        affinity_delta: float = 0.0,
+        trust_delta: float = 0.0,
+    ) -> Relationship:
+        """Records a social interaction and adjusts pairwise trust and affinity."""
+        rel = self.get_relationship(actor_id, target_id)
+        rel.affinity = max(-1.0, min(1.0, rel.affinity + affinity_delta))
+        rel.trust = max(-1.0, min(1.0, rel.trust + trust_delta))
+        return rel
 
     def update_standing(
         self,

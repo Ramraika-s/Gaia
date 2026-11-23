@@ -12,7 +12,7 @@ from pathlib import Path
 
 from sim_core.bridge.mock_adapter import MockWorldAdapter
 from sim_core.engine import SimulationEngine
-from sim_core.schemas import AgentRecord, ParcelRecord
+from sim_core.schemas import AgentRecord, Gender, ParcelRecord, RaceId
 from sim_core.society.property import PropertyManager
 from sim_core.society.wtc_market import WTCExchange
 
@@ -32,8 +32,8 @@ def test_strict_credit_conservation_across_600_ticks(tmp_path: Path, test_db_pat
     )
 
     # Spawn 100 agents across 4 races
-    races = ["HUMAN", "ELF", "DRAGON", "BEASTHUMAN"]
-    genders = ["BOY", "GIRL"]
+    races: list[RaceId] = ["HUMAN", "ELF", "DRAGON", "BEASTHUMAN"]
+    genders: list[Gender] = ["BOY", "GIRL"]
     for i in range(100):
         engine.spawn_agent(
             race=races[i % 4],
@@ -58,9 +58,7 @@ def test_strict_credit_conservation_across_600_ticks(tmp_path: Path, test_db_pat
         # Issue and repay loans
         if t == 50 and len(agent_ids) > 0:
             borrower = engine.agents[agent_ids[0]]
-            engine.bank.issue_loan(
-                borrower, principal=100.0, holder_type="AGENT", current_tick=t
-            )
+            engine.bank.issue_loan(borrower, principal=100.0, holder_type="AGENT", current_tick=t)
 
         if t == 100 and len(agent_ids) > 0:
             borrower = engine.agents[agent_ids[0]]

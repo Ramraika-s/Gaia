@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from sim_core.brains.personality import MoodState, PersonalityVector
 from sim_core.races import BeasthumanSubLineage, DragonForm, Gender, RaceId
 
 DeitySlot = Literal["world_goddess", "gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"]
@@ -19,7 +20,19 @@ Stage = Literal["INFANT", "CHILD", "ADULT", "ELDER"]
 Season = Literal["SPRING", "SUMMER", "AUTUMN", "WINTER"]
 SettlementTier = Literal["VILLAGE", "TOWN", "CITY", "STATE", "NATION"]
 RegimeType = Literal["KING", "ELECTED"]
-ParcelOwnerType = Literal["AGENT", "SETTLEMENT", "NATION", "CHURCH", "UNCLAIMED"]
+ParcelOwnerType = Literal["AGENT", "INDIVIDUAL", "SETTLEMENT", "NATION", "CHURCH", "UNCLAIMED"]
+BuildingType = Literal[
+    "GODMOTHER_PALACE",
+    "CITY_GATE",
+    "WALL_SEGMENT",
+    "HOUSE_T1_COTTAGE",
+    "HOUSE_T2_TOWNHOUSE",
+    "HOUSE_T3_MANOR",
+    "SHOP_MARKET",
+    "SHOP_BLACKSMITH",
+    "SHOP_TAVERN",
+]
+RacialStyle = Literal["HUMAN", "ELF", "DRAGON", "BEASTHUMAN", "DEMON"]
 
 PrayerIntent = Literal[
     "EARNEST_VOLUNTARY",
@@ -27,6 +40,8 @@ PrayerIntent = Literal[
     "CONGREGATIONAL_ALTAR",
     "CRISIS_PLEA",
     "PARENT_DIRECTED",
+    "PETITION",
+    "OBLIGATION",
 ]
 
 CombatContext = Literal[
@@ -96,6 +111,10 @@ class AgentRecord(BaseModel):
     sub_lineage: BeasthumanSubLineage | None = None
     secondary_heritage_race: RaceId | None = None
     dragon_form: DragonForm | None = None
+    role: Literal[
+        "CITIZEN", "PALACE_KNIGHT", "SCHOLAR", "MERCHANT", "FARMER", "CLERIC", "CITY_GUARD"
+    ] = "CITIZEN"
+    title: str | None = None
     patron_godmother_slot: RacialGodMotherSlot | None = None
     godmother_affinities: dict[str, float] = Field(default_factory=dict)
     is_oracle: bool = False
@@ -126,19 +145,37 @@ class AgentRecord(BaseModel):
     alive: bool = True
     quarantined: bool = False
     pos: Vec3 = Field(default_factory=Vec3)
-    traits: dict[str, float] = Field(default_factory=lambda: {
-        "caution": 0.0,
-        "sociability": 0.0,
-        "ambition": 0.0,
-        "loyalty": 0.0,
-        "rule_respect": 0.0,
-        "faith_devotion": 0.0,
-    })
-    skills: dict[str, float] = Field(default_factory=lambda: {
-        "walk": 0.05,
-        "self_care": 0.05,
-    })
+    yaw: float = 0.0
+    traits: dict[str, float] = Field(
+        default_factory=lambda: {
+            "caution": 0.0,
+            "sociability": 0.0,
+            "ambition": 0.0,
+            "loyalty": 0.0,
+            "rule_respect": 0.0,
+            "faith_devotion": 0.0,
+        }
+    )
+    skills: dict[str, float] = Field(
+        default_factory=lambda: {
+            "walk": 0.05,
+            "self_care": 0.05,
+        }
+    )
     tradition_ids: list[str] = Field(default_factory=list)
+    profession: str = "CITIZEN"
+    profession_level: int = 1
+    profession_xp: float = 0.0
+    hygiene: float = Field(default=1.0, ge=0.0, le=1.0)
+    fatigue: float = Field(default=0.0, ge=0.0, le=1.0)
+    known_books: list[str] = Field(default_factory=list)
+    personality: PersonalityVector | None = None
+    mood: MoodState | None = None
+    active_mechanical_effects: dict[str, float] = Field(default_factory=dict)
+    speech_text: str = ""
+    activity_state: str = "IDLE"
+    equipped_gear: list[str] = Field(default_factory=list)
+    home_building_id: str | None = None
 
 
 class DivinePersonality(BaseModel):
@@ -156,6 +193,8 @@ class DivineEntityRecord(BaseModel):
     patron_race: RaceId | None = None
     divine_energy: float = Field(default=300.0, ge=0.0, le=1000.0)
     personality: DivinePersonality = Field(default_factory=DivinePersonality)
+    personality_vector: PersonalityVector | None = None
+    mood: MoodState | None = None
     oracle_agent_ids: list[str] = Field(default_factory=list)
     active_truce_with: list[DeitySlot] = Field(default_factory=list)
     intervention_cooldown_until_tick: int = 0
@@ -169,8 +208,13 @@ class SisterCouncilMessage(BaseModel):
     sender_slot: DeitySlot
     recipient_slots: list[DeitySlot]
     topic: Literal[
-        "BORDER_FRICTION", "DRAGON_PROVOCATION", "WAR_INTERVENTION",
-        "DIVINE_TRUCE", "COVENANT_BREACH", "FREE_CITY_ACCORD", "GOD_ESCALATION"
+        "BORDER_FRICTION",
+        "DRAGON_PROVOCATION",
+        "WAR_INTERVENTION",
+        "DIVINE_TRUCE",
+        "COVENANT_BREACH",
+        "FREE_CITY_ACCORD",
+        "GOD_ESCALATION",
     ]
     summary: str
     resolution: str | None = None
@@ -204,13 +248,15 @@ class SettlementRecord(BaseModel):
     tax_rate: float = Field(default=0.05, ge=0.0, le=0.30)
     tariff_rate: float = Field(default=0.0, ge=0.0, le=0.50)
     next_election_tick: int | None = None
-    laws: dict[str, Any] = Field(default_factory=lambda: {
-        "theft_fine_mult": 2.0,
-        "assault_fine": 60.0,
-        "banish_on_repeat_offenses": 3,
-        "infant_welfare_enabled": True,
-        "property_tax_rate": 0.01,
-    })
+    laws: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "theft_fine_mult": 2.0,
+            "assault_fine": 60.0,
+            "banish_on_repeat_offenses": 3,
+            "infant_welfare_enabled": True,
+            "property_tax_rate": 0.01,
+        }
+    )
     at_war_with: list[str] = Field(default_factory=list)
     allied_with: list[str] = Field(default_factory=list)
     founded_tick: int = 0
@@ -236,13 +282,15 @@ class ReligionRecord(BaseModel):
     founder_id: str
     pope_id: str | None = None
     treasury_credits: float = 0.0
-    tenets: dict[str, float] = Field(default_factory=lambda: {
-        "pacifism": 0.5,
-        "charity_tithe_rate": 0.05,
-        "work_ethic": 0.5,
-        "sacred_land_defense": 0.5,
-        "heresy_intolerance": 0.2,
-    })
+    tenets: dict[str, float] = Field(
+        default_factory=lambda: {
+            "pacifism": 0.5,
+            "charity_tithe_rate": 0.05,
+            "work_ethic": 0.5,
+            "sacred_land_defense": 0.5,
+            "heresy_intolerance": 0.2,
+        }
+    )
     canonized_entry_ids: list[str] = Field(default_factory=list)
     excommunicated_ids: list[str] = Field(default_factory=list)
     founded_tick: int = 0
@@ -328,11 +376,20 @@ class WorldLibraryEntry(BaseModel):
     title: str
     summary: str
     author_id: str
-    author_proficiency: float = Field(ge=0.0, le=1.0)
+    author_proficiency: float = Field(default=1.0, ge=0.0, le=1.0)
     skill_bonus: float = Field(default=0.08, ge=0.01, le=0.15)
     is_scripture: bool = False
     read_count: int = 0
     created_tick: int
+    body: str | None = None
+    subject: str | None = None
+    section: str | None = None
+    fact_key: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    mechanical_effects: dict[str, float] = Field(default_factory=dict)
+    author_type: Literal["DIVINE", "MORTAL", "SYSTEM", "UNKNOWN"] = "MORTAL"
+    supersedes: list[str] = Field(default_factory=list)
+    distinct_from: list[str] = Field(default_factory=list)
 
 
 class LibraryCouncilElderRecord(BaseModel):
@@ -358,10 +415,24 @@ class LibraryProposalRecord(BaseModel):
     appeal_target: Literal["WORLD_GODDESS", "GOD"] | None = None
     appeal_ruling: str | None = None
     status: Literal[
-        "OPEN", "PENDING_GODMOTHERS", "OBJECTION_WINDOW",
-        "BLOCKED_BY_DAUGHTERS", "EXPIRED", "APPROVED", "REJECTED"
+        "OPEN",
+        "PENDING_GODMOTHERS",
+        "OBJECTION_WINDOW",
+        "BLOCKED_BY_DAUGHTERS",
+        "EXPIRED",
+        "APPROVED",
+        "REJECTED",
     ] = "OPEN"
     created_tick: int
+    body: str | None = None
+    subject: str | None = None
+    section: str | None = None
+    fact_key: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    mechanical_effects: dict[str, float] = Field(default_factory=dict)
+    author_type: Literal["DIVINE", "MORTAL", "SYSTEM", "UNKNOWN"] = "MORTAL"
+    supersedes: list[str] = Field(default_factory=list)
+    distinct_from: list[str] = Field(default_factory=list)
 
 
 class DivineCodexEntry(BaseModel):
@@ -395,12 +466,19 @@ class TraditionRecord(BaseModel):
     name: str
     origin_settlement_id: str
     trigger: Literal[
-        "FIRST_DAY_OF_WINTER", "HARVEST_SURPLUS", "ROYAL_DEATH",
-        "MARRIAGE", "WAR_VICTORY", "GOD_SIGHTING"
+        "FIRST_DAY_OF_WINTER",
+        "HARVEST_SURPLUS",
+        "ROYAL_DEATH",
+        "MARRIAGE",
+        "WAR_VICTORY",
+        "GOD_SIGHTING",
     ]
     ritual_action: Literal[
-        "GIFT_FOOD_IN_SQUARE", "GATHER_AT_TEMPLE", "SILENT_FAST",
-        "PUBLIC_FEAST", "BUILD_MONUMENT_STEP"
+        "GIFT_FOOD_IN_SQUARE",
+        "GATHER_AT_TEMPLE",
+        "SILENT_FAST",
+        "PUBLIC_FEAST",
+        "BUILD_MONUMENT_STEP",
     ]
     adoption_rate: float = Field(default=0.1, ge=0.0, le=1.0)
     taboo_penalty: float = Field(default=0.15, ge=0.0, le=0.5)
@@ -412,9 +490,16 @@ class GodLedgerEntry(BaseModel):
     day: int
     tick: int
     category: Literal[
-        "WORLD_GODDESS_SUMMARY", "GOD_MOTHER_REPORT", "CONGREGATIONAL_ALTAR",
-        "SISTER_COUNCIL", "PATRON_TIE_BREAK", "PRAYER_DIGEST",
-        "MILESTONE", "HEALER_ALERT", "CRITICAL_ESCALATION"
+        "WORLD_GODDESS_SUMMARY",
+        "GOD_MOTHER_REPORT",
+        "CONGREGATIONAL_ALTAR",
+        "SISTER_COUNCIL",
+        "PATRON_TIE_BREAK",
+        "PRAYER_DIGEST",
+        "MILESTONE",
+        "HEALER_ALERT",
+        "CRITICAL_ESCALATION",
+        "PALACE_SECURITY",
     ]
     deity_slot: DeitySlot | None = None
     speaker_name: str
@@ -455,3 +540,122 @@ class CriticVerdict(BaseModel):
     status: Literal["SUCCESS", "FAILURE"]
     reason: str
     committed_tick: int | None = None
+
+
+PalaceDecision = Literal["GRANT", "DENY", "ESCORT"]
+PalaceRequestStatus = Literal["PENDING", "GRANTED", "DENIED", "ESCORTED", "EXPIRED"]
+
+
+class PalacePass(BaseModel):
+    pass_id: str
+    agent_id: str
+    granted_by: Literal["GOD", "WORLD_GODDESS"]
+    granted_tick: int
+    expires_tick: int
+
+
+class PalaceEntryRequest(BaseModel):
+    request_id: str
+    agent_id: str
+    name: str
+    race: RaceId
+    title: str | None = None
+    criminal_count: int = 0
+    faith_devotion: float = 0.5
+    reason: str = "Petitioning Audience"
+    tick: int = 0
+    status: PalaceRequestStatus = "PENDING"
+
+
+class BuildingRecord(BaseModel):
+    building_id: str
+    city_id: str
+    building_type: BuildingType
+    racial_style: RacialStyle
+    x: float
+    y: float
+    z: float
+    rotation_y: float
+    parcel_x: int
+    parcel_z: int
+    footprint_radius: float = 8.0
+    owner_id: str | None = None
+    owner_name: str | None = None
+    for_sale: bool = False
+    sale_price: float = 0.0
+    settlement_id: str | None = None
+    is_frontier: bool = False
+
+
+class CityRecord(BaseModel):
+    city_id: str
+    name: str
+    native_race: RaceId
+    racial_style: RacialStyle
+    center_x: float
+    center_z: float
+    elevation_y: float
+    curtain_wall_radius: float = 240.0
+    godmother_slot: RacialGodMotherSlot
+    buildings_count: int = 0
+
+
+SpeechActType = Literal[
+    "GREET",
+    "WARN_PRICE_SPIKE",
+    "TRADE_OFFER",
+    "SHARE_BOOK_LORE",
+    "REPORT_CRIME",
+    "PRAYER_CALL",
+    "COURT",
+    "POLITICAL_DEBATE",
+]
+
+
+class SpeechActRecord(BaseModel):
+    speech_id: str
+    speaker_id: str
+    speaker_name: str = ""
+    listener_id: str | None = None
+    act_type: SpeechActType
+    topic: str = ""
+    value: float = 0.0
+    sentiment: float = Field(default=0.0, ge=-1.0, le=1.0)
+    trust_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    tick: int = 0
+    short_utterance: str = ""
+
+
+class DeitySyncRecord(BaseModel):
+    id: str
+    name: str
+    title: str = ""
+    race: str = "DIVINE"
+    x: float
+    y: float
+    z: float
+    yaw: float = 0.0
+    speed: float = 0.0
+    activity: str = "IDLE"
+    speech_text: str = ""
+
+
+class DialogueRequest(BaseModel):
+    type: Literal["DIALOGUE_REQUEST"] = "DIALOGUE_REQUEST"
+    dialogue_id: str = ""
+    target_type: Literal["DEITY", "MORTAL"] = "DEITY"
+    target_id: str
+    message: str
+    order: str = ""
+
+
+class DialogueResponse(BaseModel):
+    type: Literal["DIALOGUE_RESPONSE"] = "DIALOGUE_RESPONSE"
+    target_id: str
+    target_name: str
+    title: str = ""
+    race: str = "DIVINE"
+    mood: str = "calm"
+    spoken_reply: str
+    action_taken: str = ""
+    llm_backend: str = "OFFLINE_FALLBACK"

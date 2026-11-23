@@ -1,0 +1,137 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/pillar_decorated.gltf" id="1_pillar"]
+[ext_resource type="PackedScene" path="res://assets/buildings/village/roof_round_tiles_8x12.gltf" id="2_roof"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_estate_stone"]
+albedo_color = Color(0.82, 0.8, 0.78, 1)
+roughness = 0.5
+metallic = 0.08
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.4, 0.42, 0.46, 1)
+roughness = 0.4
+metallic = 0.1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trim"]
+albedo_color = Color(0.65, 0.5, 0.25, 1)
+roughness = 0.3
+metallic = 0.5
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(14, 0.5, 12)
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+material = SubResource("StandardMaterial3D_floor")
+size = Vector3(14, 0.5, 12)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_backwall"]
+size = Vector3(14, 6.5, 0.6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_backwall"]
+material = SubResource("StandardMaterial3D_estate_stone")
+size = Vector3(14, 6.5, 0.6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_sidewall"]
+size = Vector3(0.6, 6.5, 12)
+
+[sub_resource type="BoxMesh" id="BoxMesh_sidewall"]
+material = SubResource("StandardMaterial3D_estate_stone")
+size = Vector3(0.6, 6.5, 12)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_frontwing"]
+size = Vector3(5.2, 6.5, 0.6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_frontwing"]
+material = SubResource("StandardMaterial3D_estate_stone")
+size = Vector3(5.2, 6.5, 0.6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_lintel"]
+size = Vector3(14, 1.2, 2.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_lintel"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(14, 1.2, 2.5)
+
+[node name="HouseTier3Manor" type="Node3D"]
+
+[node name="Floor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_floor")
+
+[node name="BackWall" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.5, -5.7)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BackWall"]
+shape = SubResource("BoxShape3D_backwall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="BackWall"]
+mesh = SubResource("BoxMesh_backwall")
+
+[node name="WestWall" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.7, 3.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WestWall"]
+shape = SubResource("BoxShape3D_sidewall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="WestWall"]
+mesh = SubResource("BoxMesh_sidewall")
+
+[node name="EastWall" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.7, 3.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="EastWall"]
+shape = SubResource("BoxShape3D_sidewall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="EastWall"]
+mesh = SubResource("BoxMesh_sidewall")
+
+[node name="FrontLeftWing" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.4, 3.5, 5.7)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="FrontLeftWing"]
+shape = SubResource("BoxShape3D_frontwing")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="FrontLeftWing"]
+mesh = SubResource("BoxMesh_frontwing")
+
+[node name="FrontRightWing" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.4, 3.5, 5.7)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="FrontRightWing"]
+shape = SubResource("BoxShape3D_frontwing")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="FrontRightWing"]
+mesh = SubResource("BoxMesh_frontwing")
+
+[node name="PorticoLintel" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.2, 5.7)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PorticoLintel"]
+shape = SubResource("BoxShape3D_lintel")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PorticoLintel"]
+mesh = SubResource("BoxMesh_lintel")
+
+[node name="PillarL" parent="." instance=ExtResource("1_pillar")]
+transform = Transform3D(1.1, 0, 0, 0, 1.4, 0, 0, 0, 1.1, -1.8, 0.5, 5.7)
+
+[node name="PillarR" parent="." instance=ExtResource("1_pillar")]
+transform = Transform3D(1.1, 0, 0, 0, 1.4, 0, 0, 0, 1.1, 1.8, 0.5, 5.7)
+
+[node name="RoofInstance" parent="." instance=ExtResource("2_roof")]
+transform = Transform3D(1.2, 0, 0, 0, 1.1, 0, 0, 0, 1.1, 0, 6.8, -0.5)
+
+[node name="PropertyPlaque" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.5, 7.0)
+billboard = 1
+font_size = 34
+modulate = Color(1, 0.9, 0.5, 1)
+outline_size = 6
+outline_modulate = Color(0.1, 0.1, 0.1, 0.9)
+text = "FOR SALE: 580 cr"

@@ -1,0 +1,314 @@
+[gd_scene load_steps=26 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/pillar_decorated.gltf" id="1_pillar"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall_arched.gltf" id="2_wall_arch"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/banner_white.gltf" id="3_banner"]
+[ext_resource type="PackedScene" path="res://assets/buildings/props/candle_stick_stand.gltf" id="4_candle"]
+[ext_resource type="PackedScene" path="res://assets/mortals/base_dragon_true.glb" id="5_dragon"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_marble"]
+albedo_color = Color(0.92, 0.93, 0.96, 1)
+roughness = 0.25
+metallic = 0.08
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stone"]
+albedo_color = Color(0.32, 0.34, 0.38, 1)
+roughness = 0.65
+metallic = 0.05
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gold"]
+albedo_color = Color(1, 0.85, 0.35, 1)
+roughness = 0.2
+metallic = 0.85
+emission_enabled = true
+emission = Color(0.85, 0.65, 0.15, 1)
+emission_energy_multiplier = 0.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_carpet"]
+albedo_color = Color(0.65, 0.08, 0.12, 1)
+roughness = 0.55
+metallic = 0.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_glow"]
+albedo_color = Color(1, 0.6, 0.2, 1)
+roughness = 0.1
+emission_enabled = true
+emission = Color(1, 0.55, 0.15, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_terrace"]
+size = Vector3(130, 4, 130)
+
+[sub_resource type="BoxMesh" id="BoxMesh_terrace"]
+material = SubResource("StandardMaterial3D_marble")
+size = Vector3(130, 4, 130)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_stairs_ramp"]
+size = Vector3(22, 2, 33)
+
+[sub_resource type="BoxMesh" id="BoxMesh_step"]
+material = SubResource("StandardMaterial3D_marble")
+size = Vector3(22, 0.5, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_plinth"]
+size = Vector3(8, 3, 8)
+
+[sub_resource type="BoxMesh" id="BoxMesh_plinth"]
+material = SubResource("StandardMaterial3D_stone")
+size = Vector3(8, 3, 8)
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_dais_step1"]
+height = 0.4
+radius = 8.0
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_dais_step1"]
+material = SubResource("StandardMaterial3D_marble")
+top_radius = 8.0
+bottom_radius = 8.2
+height = 0.4
+radial_segments = 32
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_dais_step2"]
+height = 0.4
+radius = 6.0
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_dais_step2"]
+material = SubResource("StandardMaterial3D_marble")
+top_radius = 6.0
+bottom_radius = 6.2
+height = 0.4
+radial_segments = 32
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_dais_step3"]
+height = 0.4
+radius = 4.0
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_dais_step3"]
+material = SubResource("StandardMaterial3D_marble")
+top_radius = 4.0
+bottom_radius = 4.2
+height = 0.4
+radial_segments = 32
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_spire_base"]
+material = SubResource("StandardMaterial3D_marble")
+top_radius = 2.0
+bottom_radius = 4.5
+height = 24.0
+radial_segments = 16
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_spire_needle"]
+material = SubResource("StandardMaterial3D_gold")
+top_radius = 0.1
+bottom_radius = 2.0
+height = 18.0
+radial_segments = 16
+
+[sub_resource type="SphereMesh" id="SphereMesh_orb"]
+material = SubResource("StandardMaterial3D_glow")
+radius = 1.2
+height = 2.4
+radial_segments = 16
+rings = 16
+
+[node name="GrandDivinePalace" type="Node3D"]
+
+[node name="StaticEnvironment" type="StaticBody3D" parent="."]
+collision_mask = 0
+
+[node name="TerraceCollider" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2, 0)
+shape = SubResource("BoxShape3D_terrace")
+
+[node name="TerraceMesh" type="MeshInstance3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2, 0)
+mesh = SubResource("BoxMesh_terrace")
+
+[node name="StairsRampCollider" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 0.970143, 0.242536, 0, -0.242536, 0.970143, 0, -4, 56)
+shape = SubResource("BoxShape3D_stairs_ramp")
+
+[node name="PlinthLeftCollider" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 1.5, 38)
+shape = SubResource("BoxShape3D_plinth")
+
+[node name="PlinthLeftMesh" type="MeshInstance3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 1.5, 38)
+mesh = SubResource("BoxMesh_plinth")
+
+[node name="PlinthRightCollider" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 1.5, 38)
+shape = SubResource("BoxShape3D_plinth")
+
+[node name="PlinthRightMesh" type="MeshInstance3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 1.5, 38)
+mesh = SubResource("BoxMesh_plinth")
+
+[node name="DaisStep1Collider" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -15)
+shape = SubResource("CylinderShape3D_dais_step1")
+
+[node name="DaisStep1Mesh" type="MeshInstance3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -15)
+mesh = SubResource("CylinderMesh_dais_step1")
+
+[node name="DaisStep2Collider" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -15)
+shape = SubResource("CylinderShape3D_dais_step2")
+
+[node name="DaisStep2Mesh" type="MeshInstance3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -15)
+mesh = SubResource("CylinderMesh_dais_step2")
+
+[node name="DaisStep3Collider" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -15)
+shape = SubResource("CylinderShape3D_dais_step3")
+
+[node name="DaisStep3Mesh" type="MeshInstance3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -15)
+mesh = SubResource("CylinderMesh_dais_step3")
+
+[node name="HallWallWest" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24, 6, -15)
+shape = SubResource("BoxShape3D_stairs_ramp")
+
+[node name="HallWallEast" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 6, -15)
+shape = SubResource("BoxShape3D_stairs_ramp")
+
+[node name="BarracksWall" type="CollisionShape3D" parent="StaticEnvironment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -48, 3, 12)
+shape = SubResource("BoxShape3D_stairs_ramp")
+
+[node name="StairsVisualGroup" type="Node3D" parent="."]
+
+[node name="Step01" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 41)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step02" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.75, 43)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step03" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.25, 45)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step04" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.75, 47)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step05" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2.25, 49)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step06" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2.75, 51)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step07" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -3.25, 53)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step08" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -3.75, 55)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step09" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4.25, 57)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step10" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4.75, 59)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step11" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -5.25, 61)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step12" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -5.75, 63)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step13" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -6.25, 65)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step14" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -6.75, 67)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step15" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -7.25, 69)
+mesh = SubResource("BoxMesh_step")
+
+[node name="Step16" type="MeshInstance3D" parent="StairsVisualGroup"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -7.75, 71)
+mesh = SubResource("BoxMesh_step")
+
+[node name="TwinGuardianDragons" type="Node3D" parent="."]
+
+[node name="DragonLeft" parent="TwinGuardianDragons" instance=ExtResource("5_dragon")]
+transform = Transform3D(3.946, 0, 1.436, 0, 4.2, 0, -1.436, 0, 3.946, -12, 3, 38)
+
+[node name="DragonRight" parent="TwinGuardianDragons" instance=ExtResource("5_dragon")]
+transform = Transform3D(3.946, 0, -1.436, 0, 4.2, 0, 1.436, 0, 3.946, 12, 3, 38)
+
+[node name="GateArchLeft" parent="." instance=ExtResource("2_wall_arch")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 38)
+
+[node name="GateArchRight" parent="." instance=ExtResource("2_wall_arch")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 38)
+
+[node name="CourtyardDecor" type="Node3D" parent="."]
+
+[node name="ColonnadeWest01" parent="CourtyardDecor" instance=ExtResource("1_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 0, 12)
+
+[node name="ColonnadeWest02" parent="CourtyardDecor" instance=ExtResource("1_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 0, 20)
+
+[node name="ColonnadeWest03" parent="CourtyardDecor" instance=ExtResource("1_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 0, 28)
+
+[node name="ColonnadeEast01" parent="CourtyardDecor" instance=ExtResource("1_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 0, 12)
+
+[node name="ColonnadeEast02" parent="CourtyardDecor" instance=ExtResource("1_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 0, 20)
+
+[node name="ColonnadeEast03" parent="CourtyardDecor" instance=ExtResource("1_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 0, 28)
+
+[node name="Banner01" parent="CourtyardDecor" instance=ExtResource("3_banner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0, 37.5)
+
+[node name="Banner02" parent="CourtyardDecor" instance=ExtResource("3_banner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 37.5)
+
+[node name="BrazierLeft" parent="CourtyardDecor" instance=ExtResource("4_candle")]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, -8.5, 3, 38)
+
+[node name="BrazierRight" parent="CourtyardDecor" instance=ExtResource("4_candle")]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 8.5, 3, 38)
+
+[node name="CelestialSpire" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -15)
+
+[node name="SpireBase" type="MeshInstance3D" parent="CelestialSpire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 13, 0)
+mesh = SubResource("CylinderMesh_spire_base")
+
+[node name="SpireNeedle" type="MeshInstance3D" parent="CelestialSpire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 34, 0)
+mesh = SubResource("CylinderMesh_spire_needle")
+
+[node name="SpireOrb" type="MeshInstance3D" parent="CelestialSpire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 44, 0)
+mesh = SubResource("SphereMesh_orb")
+
+[node name="SpireLight" type="OmniLight3D" parent="CelestialSpire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 44, 0)
+light_color = Color(1, 0.88, 0.55, 1)
+light_energy = 4.0
+omni_range = 80.0

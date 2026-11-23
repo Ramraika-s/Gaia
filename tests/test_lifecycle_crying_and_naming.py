@@ -122,18 +122,51 @@ def test_cultural_birth_naming_dynasties_and_holy_imprinting():
     dwarf_boy = generate_birth_name("BEASTHUMAN", "BOY", sub_lineage="DWARF", seed=10)
 
     assert elf_boy in [
-        "Aelarion", "Faelar", "Sylas", "Thalor", "Elenion", "Caelynn", "Lorian", "Ilidor", "Aerin"
+        "Aelarion",
+        "Faelar",
+        "Sylas",
+        "Thalor",
+        "Elenion",
+        "Caelynn",
+        "Lorian",
+        "Ilidor",
+        "Aerin",
     ]
     assert elf_girl in [
-        "Lyra", "Aeris", "Eleniel", "Vaeloria", "Naevys", "Althea", "Sylphira", "Fiora", "Ilyria"
+        "Lyra",
+        "Aeris",
+        "Eleniel",
+        "Vaeloria",
+        "Naevys",
+        "Althea",
+        "Sylphira",
+        "Fiora",
+        "Ilyria",
     ]
     assert human_boy in [
-        "Aldric", "Kaelen", "Cedric", "Lucian", "Valen", "Gareth", "Rowan", "Tristan",
-        "Edwin", "Thomas", "Roger"
+        "Aldric",
+        "Kaelen",
+        "Cedric",
+        "Lucian",
+        "Valen",
+        "Gareth",
+        "Rowan",
+        "Tristan",
+        "Edwin",
+        "Thomas",
+        "Roger",
     ]
     assert "Pyra" in dragon_girl or "Cinder" in dragon_girl or len(dragon_girl) > 3
     assert dwarf_boy in [
-        "Torin", "Brokk", "Duer", "Thrain", "Gimli", "Berta", "Balin", "Durin", "Thrum"
+        "Torin",
+        "Brokk",
+        "Duer",
+        "Thrain",
+        "Gimli",
+        "Berta",
+        "Balin",
+        "Durin",
+        "Thrum",
     ]
 
     # 2. Dynasty inheritance

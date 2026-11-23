@@ -1,75 +1,174 @@
 {
-  "version": "3.0.0",
+  "version": "4.0.0",
   "world_bounds": {
-    "min_x": -5000.0,
-    "max_x": 5000.0,
-    "min_z": -5000.0,
-    "max_z": 5000.0
+    "min_x": -4000.0,
+    "max_x": 4000.0,
+    "min_z": -4000.0,
+    "max_z": 4000.0
   },
-  "resolution": 512,
-  "max_height_meters": 140.0,
-  "landmark_pads": {
-    "world_library": {
-      "x": 100.0,
-      "z": 100.0,
-      "radius": 70.0,
-      "target_h": 18.0
-    },
-    "wtc_market": {
-      "x": -100.0,
-      "z": 100.0,
-      "radius": 70.0,
-      "target_h": 18.0
-    },
-    "courthouse": {
-      "x": -100.0,
-      "z": -100.0,
-      "radius": 70.0,
-      "target_h": 18.0
-    },
-    "cathedral_altar": {
-      "x": 100.0,
-      "z": -100.0,
-      "radius": 70.0,
-      "target_h": 18.0
-    },
-    "world_goddess_sanctum": {
+  "resolution": 1024,
+  "sea_level": 0.0,
+  "min_height_meters": -25.0,
+  "max_height_meters": 180.0,
+  "ring_0_acropolis": {
+    "center": {
       "x": 0.0,
-      "z": 0.0,
-      "radius": 85.0,
-      "target_h": 18.5
+      "z": 0.0
+    },
+    "palace_plateau": {
+      "radius": 95.0,
+      "target_h": 32.0
+    },
+    "outer_plaza": {
+      "min_radius": 160.0,
+      "max_radius": 360.0,
+      "target_h": 24.0
+    },
+    "pads": {
+      "world_goddess_palace": {
+        "x": 0.0,
+        "z": 0.0,
+        "radius": 95.0,
+        "target_h": 32.0
+      },
+      "world_library": {
+        "x": 180.0,
+        "z": 180.0,
+        "radius": 55.0,
+        "target_h": 24.0
+      },
+      "wtc_market": {
+        "x": -180.0,
+        "z": 180.0,
+        "radius": 55.0,
+        "target_h": 24.0
+      },
+      "courthouse": {
+        "x": -180.0,
+        "z": -180.0,
+        "radius": 55.0,
+        "target_h": 24.0
+      },
+      "cathedral_altar": {
+        "x": 180.0,
+        "z": -180.0,
+        "radius": 55.0,
+        "target_h": 24.0
+      }
     }
   },
-  "biomes": {
-    "central_basin": {
-      "center_x": 0.0,
-      "center_z": 0.0,
-      "radius": 850.0
+  "ring_1_cities": {
+    "sylvanor": {
+      "name": "Sylvanor",
+      "race": "ELF",
+      "angle_deg": 0.0,
+      "x": 1150.0,
+      "z": 0.0,
+      "target_h": 28.0,
+      "radius": 280.0,
+      "blend_radius": 380.0,
+      "description": "Elf emerald highland forest"
     },
-    "human_plains": {
-      "center_x": -1800.0,
-      "center_z": 2000.0,
-      "radius": 2200.0
+    "aurelia": {
+      "name": "Aurelia",
+      "race": "HUMAN",
+      "angle_deg": 72.0,
+      "x": 355.37,
+      "z": 1093.71,
+      "target_h": 18.0,
+      "radius": 280.0,
+      "blend_radius": 380.0,
+      "description": "Human sunlit temperate plains with southern bay access"
     },
-    "elf_highlands": {
-      "center_x": 2200.0,
-      "center_z": 2000.0,
-      "radius": 2200.0
+    "fenris_hold": {
+      "name": "Fenris Hold",
+      "race": "BEASTHUMAN",
+      "angle_deg": 144.0,
+      "x": -930.37,
+      "z": 675.95,
+      "target_h": 24.0,
+      "radius": 280.0,
+      "blend_radius": 380.0,
+      "description": "Beasthuman rugged timber steppes and taiga"
     },
-    "dragon_peaks": {
-      "center_x": 2500.0,
-      "center_z": -2500.0,
-      "radius": 2400.0
+    "malakor": {
+      "name": "Malakor",
+      "race": "DEMON",
+      "angle_deg": 216.0,
+      "x": -930.37,
+      "z": -675.95,
+      "target_h": 42.0,
+      "radius": 280.0,
+      "blend_radius": 380.0,
+      "description": "Demon basalt crags and volcanic ashlands"
     },
-    "beasthuman_taiga": {
-      "center_x": -2500.0,
-      "center_z": -2500.0,
-      "radius": 2400.0
-    },
-    "demon_crags": {
-      "center_x": -3500.0,
-      "center_z": 500.0,
-      "radius": 2200.0
+    "drakonis_spire": {
+      "name": "Drakonis Spire",
+      "race": "DRAGON",
+      "angle_deg": 288.0,
+      "x": 355.37,
+      "z": -1093.71,
+      "target_h": 68.0,
+      "radius": 280.0,
+      "blend_radius": 380.0,
+      "description": "Dragon obsidian alpine peaks and volcanic ridges"
     }
+  },
+  "ring_2_wilderness": {
+    "min_radius": 1500.0,
+    "max_radius": 3300.0,
+    "demon_caldera_peak": {
+      "x": -2400.0,
+      "z": -1650.0,
+      "target_h": 145.0
+    },
+    "dragon_peaks_ridge": {
+      "x": 2100.0,
+      "z": -2200.0,
+      "target_h": 165.0
+    },
+    "rivers": [
+      "Drakonis_Run",
+      "Sylvan_Brook",
+      "Aurelian_River"
+    ]
+  },
+  "ring_3_ocean": {
+    "beach_elevation_range": [
+      0.0,
+      4.5
+    ],
+    "deep_ocean_floor": -25.0,
+    "ocean_radius_start": 3300.0,
+    "islets": [
+      {
+        "name": "Sunken_Isle",
+        "x": -2900.0,
+        "z": 2500.0,
+        "radius": 220.0,
+        "peak_h": 14.0
+      },
+      {
+        "name": "Coral_Atoll",
+        "x": 2500.0,
+        "z": 2700.0,
+        "radius": 200.0,
+        "peak_h": 12.0
+      },
+      {
+        "name": "Northwatch_Isle",
+        "x": 0.0,
+        "z": -3600.0,
+        "radius": 250.0,
+        "peak_h": 18.0
+      },
+      {
+        "name": "Mist_Isle",
+        "x": -2800.0,
+        "z": -2600.0,
+        "radius": 200.0,
+        "peak_h": 15.0
+      }
+    ]
   }
 }

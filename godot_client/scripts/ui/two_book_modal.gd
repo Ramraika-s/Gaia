@@ -42,9 +42,14 @@ var _codex_entries: Array = []
 var _codex_proposals: Array = []
 var _selected_codex_proposal_id: String = ""
 
+var _toast_panel: PanelContainer = null
+var _toast_label: Label = null
+var _toast_tween: Tween = null
+
 
 func _ready() -> void:
 	visible = false
+	_setup_toast_ui()
 	_connect_ui_signals()
 	_connect_bridge_signals()
 
@@ -176,8 +181,72 @@ func _on_library_commit_pressed() -> void:
 		lib_input_content.text = ""
 
 
+func _setup_toast_ui() -> void:
+	if _toast_panel != null:
+		return
+	_toast_panel = PanelContainer.new()
+	_toast_panel.name = "StatusToast"
+	_toast_panel.visible = false
+
+	var sbox: StyleBoxFlat = StyleBoxFlat.new()
+	sbox.set_corner_radius_all(6)
+	sbox.content_margin_left = 14
+	sbox.content_margin_right = 14
+	sbox.content_margin_top = 8
+	sbox.content_margin_bottom = 8
+	_toast_panel.add_theme_stylebox_override("panel", sbox)
+
+	_toast_label = Label.new()
+	_toast_label.name = "ToastText"
+	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast_label.add_theme_font_size_override("font_size", 14)
+	_toast_panel.add_child(_toast_label)
+
+	var vbox: VBoxContainer = $Center/ModalPanel/VBox
+	vbox.add_child(_toast_panel)
+	vbox.move_child(_toast_panel, 2)
+
+
+func show_toast(message: String, is_success: bool = true) -> void:
+	_setup_toast_ui()
+	if not _toast_panel or not _toast_label:
+		return
+
+	var sbox: StyleBoxFlat = _toast_panel.get_theme_stylebox("panel") as StyleBoxFlat
+	if sbox:
+		if is_success:
+			sbox.bg_color = Color(0.12, 0.35, 0.18, 0.95)
+			sbox.border_color = Color(0.4, 0.85, 0.45, 1.0)
+			sbox.set_border_width_all(1)
+			_toast_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7, 1.0))
+		else:
+			sbox.bg_color = Color(0.45, 0.12, 0.12, 0.95)
+			sbox.border_color = Color(0.9, 0.3, 0.3, 1.0)
+			sbox.set_border_width_all(1)
+			_toast_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+
+	_toast_label.text = message
+	_toast_panel.modulate.a = 1.0
+	_toast_panel.visible = true
+
+	if _toast_tween and _toast_tween.is_valid():
+		_toast_tween.kill()
+
+	_toast_tween = create_tween()
+	_toast_tween.tween_interval(3.5)
+	_toast_tween.tween_property(_toast_panel, "modulate:a", 0.0, 0.5)
+	_toast_tween.tween_callback(func(): _toast_panel.visible = false)
+
+
 func _on_library_edit_response(data: Dictionary) -> void:
-	print("[TwoBookModal] Library edit response: ", data.get("status", ""), " - ", data.get("reason", ""))
+	var status: String = data.get("status", "")
+	var reason: String = data.get("reason", "")
+	var title: String = data.get("title", data.get("topic", "Volume"))
+	if status == "SUCCESS":
+		show_toast("✦ Canonical Volume '%s' inscribed into World Library! ✦" % title, true)
+	else:
+		show_toast("⚠ Inscription Failed: %s" % reason, false)
+
 	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
 	if bridge:
 		bridge.request_book_state_sync()
@@ -271,21 +340,40 @@ func _on_codex_promulgate_pressed() -> void:
 
 
 func _on_codex_approve_response(data: Dictionary) -> void:
-	print("[TwoBookModal] Codex approve response: ", data)
+	var status: String = data.get("status", "")
+	var reason: String = data.get("reason", "")
+	if status == "SUCCESS":
+		show_toast("✦ Divine Proposal Approved & Parameter Override Applied! ✦", true)
+	else:
+		show_toast("⚠ Approval Failed: %s" % reason, false)
+
 	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
 	if bridge:
 		bridge.request_book_state_sync()
 
 
 func _on_codex_reject_response(data: Dictionary) -> void:
-	print("[TwoBookModal] Codex reject response: ", data)
+	var status: String = data.get("status", "")
+	var reason: String = data.get("reason", "")
+	if status == "SUCCESS":
+		show_toast("✦ Divine Proposal Rejected cleanly ✦", true)
+	else:
+		show_toast("⚠ Rejection Failed: %s" % reason, false)
+
 	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
 	if bridge:
 		bridge.request_book_state_sync()
 
 
 func _on_codex_edit_response(data: Dictionary) -> void:
-	print("[TwoBookModal] Codex edit response: ", data)
+	var status: String = data.get("status", "")
+	var reason: String = data.get("reason", "")
+	var did: String = data.get("decree_id", "Decree")
+	if status == "SUCCESS":
+		show_toast("⚡ Divine Decree '%s' promulgated to Codex! ⚡" % did, true)
+	else:
+		show_toast("⚠ Decree Failed: %s" % reason, false)
+
 	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
 	if bridge:
 		bridge.request_book_state_sync()

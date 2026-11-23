@@ -146,7 +146,8 @@ def unpack_zip_gltf_folder(
     target_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path, "r") as zf:
         members = [
-            m for m in zf.namelist()
+            m
+            for m in zf.namelist()
             if m.startswith(source_prefix)
             and not m.endswith("/")
             and Path(m).suffix.lower() in include_exts
