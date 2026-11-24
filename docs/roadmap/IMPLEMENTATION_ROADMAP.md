@@ -1,6 +1,6 @@
 # IMPLEMENTATION_ROADMAP.md — Phased Build Order, Sprints & Acceptance Milestones
 
-**Status:** Phases 0–5 and Gaia v4.0 Sprints 0–6 (including Sprint 5.5) are **100% COMPLETE and VERIFIED** across 182 pytest tests, the 10,000-agent neural benchmark, and the 1,500-agent headless soak test.
+**Status:** Phases 0–5 and Gaia v4.0 Sprints 0–6 (including Sprint 5.5) are **100% COMPLETE and VERIFIED** across 191 pytest tests (organized into 7 domain-modular packages), the 10,000-agent neural benchmark, and the 1,500-agent headless soak test.
 
 > **Execution Governance:** All implementation work adheres to the architectural invariants, `uv` Python 3.12 toolchain rules, and Git verification hygiene defined in `AGENTS.md`.
 
@@ -138,7 +138,7 @@
 - `scripts/generate_world_heightmap.py`: Generates the exact `1024×1024` (`-4000..4000m`) heightmap with smooth continental contours, Ring 0 plateau (`32m`), Ring 1 city anchors, Ring 2 frontier slopes, and Ring 3 ocean floor (`SEA_LEVEL = 0.0m`).
 - `godot_client/scripts/terrain_height_sampler.gd`: Reads `data/world_heightmap.npy` directly, constructs a matching `HeightMapShape3D`, and exposes fast bilinear height sampling.
 - `godot_client/scripts/terrain_manager.gd`: Binds displaced terrain mesh, physics collider, and `terrain_biome.gdshader` uniforms.
-- `tests/test_heightmap_parity.py`: Verifies bit-for-bit elevation parity between Python and Godot height samplers across 1,000 random coordinates.
+- `tests/world/test_heightmap_and_weather.py`: Verifies bit-for-bit elevation parity between Python and Godot height samplers across 1,000 random coordinates.
 
 ### Acceptance Milestones
 - [x] Python and Godot elevation samples agree across all coordinates with **0.00m error**.
@@ -152,7 +152,7 @@
 ### Deliverables
 - `godot_client/scenes/landmarks/grand_divine_palace.tscn`: Multi-tier Acropolis palace structure seated at `(0, 32, 0)`.
 - Twin Guardian Dragons flanking the Main Gate (`x = ±12m, y = 32m, z = 38m`): Left (Sovereign of Ash) and Right (Sovereign of Frost) with terrifying idle poses and fear aura emitters.
-- `tests/test_palace_security_and_knights.py`: Validates Acropolis positioning and Dragon visual anchors.
+- `tests/world/test_palace_security_and_navigation.py`: Validates Acropolis positioning and Dragon visual anchors.
 
 ### Acceptance Milestones
 - [x] Grand Divine Palace sits flush on the 32m central plateau with zero ground clipping.
@@ -186,7 +186,7 @@
   - Central God-Mother Palaces, `240m` perimeter curtain walls, 4 gates each, and organized street grids.
   - Modular walk-in seed housing (Tier 1 Cottages, Tier 2 Townhouses, Tier 3 Manors, and commercial shops) with deeded `16×16m` parcels.
 - `godot_client/scripts/cities_and_buildings_manager.gd`: Spawns cities and buildings, distance-streams modular houses outside 650m for 60 FPS performance, and updates night emissive windows/lanterns.
-- `tests/test_five_cities_and_building_sync.py`: Verifies layout, building counts, and WebSocket synchronization.
+- `tests/world/test_cities_gates_and_buildings.py`: Verifies layout, building counts, and WebSocket synchronization.
 
 ### Acceptance Milestones
 - [x] All 5 Ring 1 cities spawn at exact coordinates with matching racial architectural styles and curtain walls.
@@ -203,7 +203,7 @@
 - `sim_core/brains/memory_rag.py`: Grounded `MemoryRAGIndex` with strict `known_books` information asymmetry.
 - `sim_core/brains/consolidation.py`: `SleepCycleConsolidator` stabilizing neural plasticity during sleep.
 - `sim_core/society/speech_acts.py`: 8 Semantic Speech Acts (`GREET`, `WARN_PRICE_SPIKE`, `TRADE_OFFER`, `SHARE_BOOK_LORE`, `REPORT_CRIME`, `PRAYER_CALL`, `COURT`, `POLITICAL_DEBATE`).
-- `tests/test_hybrid_cognitive_core.py`: Benchmarks 10,000 agents in < 25 ms/step on CPU and verifies RAG asymmetry.
+- `tests/brains/test_hierarchical_brain_and_actions.py` & `tests/brains/test_consolidation_and_rag.py`: Benchmarks 10,000 agents in < 25 ms/step on CPU and verifies RAG asymmetry.
 
 ### Acceptance Milestones
 - [x] 10,000-agent batched forward pass across 3 tiers executes in **~15.0 ms/step** on CPU with zero NaNs.
@@ -220,7 +220,7 @@
 - `godot_client/scripts/divine_npcs_manager.gd`: Renders the 6 VRoid deities in the 3D world, interpolating their positions and playing contextual animations.
 - `godot_client/scripts/god_camera_controller.gd`: Real `CharacterBody3D` God Avatar with WASD controls, sprint, crouch, flight toggle (`F`), jump, dust particles, and surface-aware footstep audio.
 - `godot_client/scripts/ui/dialogue_modal.gd`: Interactive dialogue modal (`E` key) for talking to Deities and Mortals.
-- `tests/test_spatial_awareness_speech_and_deity_ai.py` & `tests/test_end_to_end_live_bridge.py`.
+- `tests/brains/test_divine_ai_and_llm.py` & `tests/bridge/test_ws_protocol_and_dialogue.py`.
 
 ### Acceptance Milestones
 - [x] All 6 Deities execute autonomous daily schedules and respond to direct God commands (`FOLLOW_GOD`, `RETURN_PALACE`, `CONVENE_COUNCIL`).
@@ -236,7 +236,7 @@
 - Single-slot concurrency lock (`-np 1`), reasoning `<think>` block stripping, JSON schema extraction, and `WorldGoddessCritic` fail-closed validation.
 - Grounded deterministic offline fallback generator using live RAG memories, CPI, and personality traits.
 - `scripts/verify_live_qwen.py`: Smoke test verifying real GGUF inference via `llama-server`.
-- `tests/test_local_llm_integration.py`: Verifies think-tag stripping, JSON parsing, prompt construction, and offline fallback.
+- `tests/brains/test_divine_ai_and_llm.py`: Verifies think-tag stripping, JSON parsing, prompt construction, and offline fallback.
 
 ### Acceptance Milestones
 - [x] Local LLM responses strip `<think>` blocks and parse structured JSON reliably.
@@ -255,7 +255,7 @@
 - `sim_core/society/housing_market.py`: Autonomous home purchases, in-place tier upgrades, probate inheritance cascades, and escheatment.
 - `sim_core/society/gear_economy.py`: Crafted outfits, accessories, and tools/weapons with visual socket attachments on mortal rigs.
 - `godot_client/scripts/grass_chunk_manager.gd`: Dynamic 85m ring MultiMeshInstance3D 3D grass system with `grass_sway.gdshader`.
-- `tests/test_housing_gear_frontier_and_harvester.py` & `tests/test_knowledge_foundry_dedupe_and_merge.py`.
+- `tests/economy/test_housing_frontier_and_gear.py` & `tests/persistence/test_knowledge_foundry_and_cli.py`.
 
 ### Acceptance Milestones
 - [x] 3-Stage deduplication cascade blocks exact and fuzzy duplicates while flagging near-duplicate warnings.
@@ -295,7 +295,7 @@ Comprehensive production hardening, protocol normalization, multi-agent adversar
    - Synchronized all documentation and verified 100% valid relative Markdown links across repository.
 
 ### Acceptance Milestones
-- [x] All 182 unit, integration, and regression tests passing cleanly under pytest.
+- [x] All 191 unit, integration, and regression tests passing cleanly under pytest across 7 domain packages.
 - [x] Zero ObjectDB leaks, resource leaks, or script warnings on headless Godot 4.7.2 boot.
 - [x] 10,000-agent 3-tier neural benchmark satisfies latency (< 25 ms/step) and memory (< 250 MB) budgets.
 - [x] 1,500-agent 5-race headless soak test (600 ticks) passes with zero double-entry drift and verified atomic rewind.

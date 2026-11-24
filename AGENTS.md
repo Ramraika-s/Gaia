@@ -215,40 +215,36 @@ Do **not** violate these rules in any module or refactor:
 │   ├── scenes/                                        # MainWorld, RealityBubble, Landmarks, Buildings, UI Modals
 │   ├── shaders/                                       # TerrainBiome, WaterStylized, GrassSway, EmissiveWindow
 │   └── scripts/                                       # Controllers, UiStateManager, animators, and UI modal scripts
-├── tests/                                             # 29 test files (182 passing tests under pytest)
-│   ├── conftest.py
-│   ├── test_aa_step2_dialogue_and_bubble.py
-│   ├── test_aa_step3a_visuals_and_rigging.py
-│   ├── test_batched_neural_unbounded.py
-│   ├── test_divine_hierarchy_patronage_and_councils.py
-│   ├── test_economy_double_entry_inflation.py
-│   ├── test_end_to_end_live_bridge.py
-│   ├── test_five_cities_and_building_sync.py
-│   ├── test_god_console_and_ws_bridge.py
-│   ├── test_healer_resilience.py
-│   ├── test_heightmap_parity.py
-│   ├── test_housing_gear_frontier_and_harvester.py
-│   ├── test_hybrid_cognitive_core.py
-│   ├── test_knowledge_foundry_dedupe_and_merge.py
-│   ├── test_lifecycle_crying_and_naming.py
-│   ├── test_local_llm_integration.py
-│   ├── test_palace_security_and_knights.py
-│   ├── test_persistence_corruption_rewind.py
-│   ├── test_politics_borders_library_religion.py
-│   ├── test_races_gender_pregnancy_dragon_morph.py
-│   ├── test_regional_weather.py
-│   ├── test_schemas.py
-│   ├── test_spatial_awareness_speech_and_deity_ai.py
-│   ├── test_wave1_ipc_and_protocol.py
-│   ├── test_wave2_cognitive_action_and_books.py
-│   ├── test_wave2_world_and_deities.py
-│   ├── test_wave3_economy_security_navigation.py
-│   ├── test_wave3_godot_presentation_and_ui.py
-│   ├── test_wave4_cognitive_lifecycle_divine.py
-│   ├── test_wave4_economy_housing_and_gear.py
-│   ├── test_wave5_persistence_restore_and_knowledge_cli.py
-│   ├── test_wave6_hygiene_and_benchmarks.py
-│   └── test_world_goddess_rbac_and_atomic_save.py
+├── tests/                                             # 21 domain test files (191 passing tests under pytest)
+│   ├── conftest.py                                    # Shared isolated fixtures & typed domain factories
+│   ├── brains/                                        # Cognitive architecture, batched neural slabs, RAG & LLM
+│   │   ├── test_batched_neural_slab.py
+│   │   ├── test_consolidation_and_rag.py
+│   │   ├── test_divine_ai_and_llm.py
+│   │   └── test_hierarchical_brain_and_actions.py
+│   ├── bridge/                                        # WebSocket protocol v4.0.0, dialogue & God Console CLI
+│   │   ├── test_god_console_cli.py
+│   │   └── test_ws_protocol_and_dialogue.py
+│   ├── core/                                          # Schemas, 5-race biology, lifecycle, distress & resilience
+│   │   ├── test_healer_resilience.py
+│   │   ├── test_races_and_lifecycle.py
+│   │   └── test_schemas_and_config.py
+│   ├── economy/                                       # Double-entry banking, WTC, probate & gear market
+│   │   ├── test_banking_and_wtc.py
+│   │   ├── test_housing_frontier_and_gear.py
+│   │   └── test_property_and_probate.py
+│   ├── hygiene/                                       # Asset manifest parity, orphan cleanup & doc link integrity
+│   │   └── test_repo_assets_and_docs.py
+│   ├── persistence/                                   # SQLite WAL migrations, atomic 2PC, rewind & Two-Book governance
+│   │   ├── test_db_migrations_and_atomic_checkpoints.py
+│   │   ├── test_knowledge_foundry_and_cli.py
+│   │   ├── test_restore_rewind_and_launcher.py
+│   │   └── test_two_book_governance_and_world_goddess.py
+│   └── world/                                         # Heightmap parity, weather, cities, security & polities
+│       ├── test_cities_gates_and_buildings.py
+│       ├── test_heightmap_and_weather.py
+│       ├── test_palace_security_and_navigation.py
+│       └── test_politics_borders_religion_and_speech.py
 └── data/                                              # Git-ignored runtime state (DB, checkpoints, god_ledger)
 ```
 

@@ -46,7 +46,7 @@ Welcome to the central documentation index for **Gaia v4.0** — the persistent,
 
 ## 6. Implementation Roadmap & Milestones (`docs/roadmap/`)
 
-- [IMPLEMENTATION_ROADMAP.md](file:///home/shivam/Desktop/Gaia/docs/roadmap/IMPLEMENTATION_ROADMAP.md): Complete implementation record for Phases 0–5, Gaia v4.0 Sprints 0–6, Waves 1–6 Hardening & Normalization, verified test counts (182 unit/integration tests), 10,000-agent benchmarks, and future v4.1+ architectural ideas.
+- [IMPLEMENTATION_ROADMAP.md](file:///home/shivam/Desktop/Gaia/docs/roadmap/IMPLEMENTATION_ROADMAP.md): Complete implementation record for Phases 0–5, Gaia v4.0 Sprints 0–6, Waves 1–6 Hardening & Normalization, modularized domain test suite (191 unit/integration tests across 7 domain packages), 10,000-agent benchmarks, and future v4.1+ architectural ideas.
 
 ---
 

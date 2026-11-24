@@ -4,7 +4,7 @@
 [![uv](https://img.shields.io/badge/toolchain-uv-blueviolet.svg)](https://github.com/astral-sh/uv)
 [![Godot 4.7.2](https://img.shields.io/badge/godot-4.7.2-478cbf.svg)](https://godotengine.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests Passing](https://img.shields.io/badge/pytest-182%20passed-success.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/pytest-191%20passed-success.svg)](tests/)
 
 **Gaia v4.0** is a persistent, local-first, stylized anime-fantasy AI civilization simulation with **no hard population cap**, scaling organically from initial founders to **10,000+ autonomous neural-network agents** across **5 distinct races** (`HUMAN`, `ELF`, `DRAGON`, `BEASTHUMAN` with 4 sub-lineages, and `DEMON`) and **2 biological genders** (`BOY` / `GIRL`).
 
@@ -137,7 +137,9 @@ bash scripts/setup_uv_env.sh
 # 3. Verify environment
 uv run python --version   # Must output Python 3.12.x
 uv run ruff check sim_core tests scripts
-uv run pytest --tb=short -q  # Runs all 182 unit & regression tests
+uv run pyright
+uv run pytest -m "not slow" -q       # Fast dev loop (< 5s)
+uv run pytest --tb=short -q          # Runs all 191 unit & regression tests across 7 domain packages
 ```
 
 ### 2. Launching the Simulation
