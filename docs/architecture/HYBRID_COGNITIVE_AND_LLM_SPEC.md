@@ -49,17 +49,25 @@ Every agent's decision logic blends three specialized neural layers into a final
 ### 2.2 Tier 2: Vocational Mastery (`ProfessionNetRegistry`)
 - **Module:** `sim_core/brains/profession_nets.py`
 - **Scope:** 10 discrete profession networks covering all societal roles:
-  1. `FARMER`: Cultivation, crop harvesting, granary storage, winter stockpiling.
-  2. `LUMBERJACK`: Timber felling, reforestation, lumber seasoning, haulage.
-  3. `MINER`: Subterranean prospecting, stone quarrying, iron/gold extraction.
-  4. `BLACKSMITH`: Smelting, tool forging, armor smithing, weapon crafting.
-  5. `MERCHANT`: WTC arbitrage, market retail, caravan logistics, price negotiation.
+  1. `KNIGHT`: Heavy combat tactics, shield wall coordination, chivalric escort.
+  2. `CITY_GUARD`: Wall patrolling, gate defense, thief apprehension, settlement curfew enforcement.
+  3. `FARMER`: Cultivation, crop harvesting, granary storage, winter stockpiling.
+  4. `MERCHANT`: WTC arbitrage, retail stall sales, caravan logistics, price negotiation.
+  5. `BLACKSMITH`: Smelting, tool forging, weapon crafting, armor repairs.
   6. `BUILDER`: Foundation laying, cottage construction, city wall masonry, tier upgrades.
-  7. `GUARD`: Wall patrolling, gate defense, thief apprehension, riot suppression.
-  8. `SCHOLAR`: World Library research, book transcription, apprentice tutoring, history writing.
-  9. `CLERIC`: Altar worship, congregational prayer leading, spiritual solace, hospital care.
-  10. `HERBALIST`: Wild botanical gathering, medicine compounding, poison curing.
-- **Progression:** Levels 1 to 10. Higher mastery unlocks advanced recipes, elevates execution speed, and boosts vocational logit confidence.
+  7. `SCHOLAR`: World Library research, book transcription, apprentice tutoring, history writing.
+  8. `CLERIC`: Altar worship, congregational prayer leading, spiritual solace, hospital care.
+  9. `HUNTER`: Wilderness tracking, pelts harvesting, beast deterrence, archery.
+  10. `CITIZEN`: Baseline subsistence, urban chores, basic civic participation.
+- **Progression:** Levels 1 to 10 (Apprentice to Grandmaster) driven by XP and unlocked scholarship.
+- **Mechanical Effect Channels (`EFFECT_KEY_TO_CHANNEL`):**
+  Aggregates active book bonuses into 6 normalized feature channels in `[-1.0, 1.0]`:
+  - Channel 0: Defense and structural integrity
+  - Channel 1: Harvest yields and crafting speed
+  - Channel 2: Trade margins and fee reductions
+  - Channel 3: Research and scholarship velocity
+  - Channel 4: Faith and prayer gains
+  - Channel 5: Stamina efficiency and endurance
 
 ### 2.3 Tier 3: Individual Personality & Working Memory (`BatchedAgentSelfNet`)
 - **Module:** `sim_core/neural/batched_self_net.py`
@@ -67,7 +75,11 @@ Every agent's decision logic blends three specialized neural layers into a final
 - **Working Memory:** Manual `GRUCell(20, 32)` per agent, storing multi-tick temporal context ($H \in \mathbb{R}^{C \times 32}$) in RAM.
 - **Output:** Preference delta vector $\Delta L_{\text{self}} \in \mathbb{R}^{N \times 20}$, self-predicted reward $\hat{r}_t \in \mathbb{R}^{N \times 1}$, and confidence $c_t \in \mathbb{R}^{N \times 1}$.
 - **Vectorized Math:**
-  $$L_{\text{final}} = L_{\text{shared}} + L_{\text{prof}} + 1.25 \cdot \tanh(\Delta L_{\text{self}}) \cdot g_{\text{survival}}$$
+  $$L_{\text{final}} = L_{\text{shared}} + 0.8 \cdot \tanh(\Delta L_{\text{prof}}) + 1.25 \cdot \tanh(\Delta L_{\text{self}}) \cdot g_{\text{survival}} + W_{\text{bias}} \cdot P_{\text{traits}}$$
+
+### 2.4 Action Execution Bridge (`CognitiveActionExecutor`)
+- **Module:** `sim_core/brains/action_bridge.py`
+- **Scope:** Translates the winning action index among the 20 discrete logits into concrete world effects (`sim_core.engine.SimulationEngine`), evaluating preconditions (stamina, credits, inventory, distance), updating vitals, mutating economy/world states, and recording experiences into `ProfessionRolloutBuffer`.
 
 ---
 
@@ -88,24 +100,25 @@ Unlike LLM agents with global world knowledge, mortals in Gaia obey strict cogni
 
 Every mortal is born with an individualized 10-dimensional trait profile:
 - **10 Orthogonal Dimensions ($[-1.0, 1.0]$):**
-  1. `openness`: Curiosity, receptivity to foreign cultures, willingness to pioneer.
-  2. `conscientiousness`: Work ethic, duty to craft, adherence to contracts.
-  3. `extraversion`: Sociability, propensity to engage in public speech acts.
-  4. `agreeableness`: Compassion, generosity with family allowances, empathy for crying children.
-  5. `neuroticism`: Sensitivity to danger, anxiety during famine, fear of True Dragons.
-  6. `ambition`: Drive to accumulate wealth, run for political office, or upgrade housing.
-  7. `caution`: Tactical hesitation, risk aversion in combat and high-leverage WTC borrowing.
-  8. `loyalty`: Dedication to dynasty, settlement leader, and patron god-mother.
-  9. `rule_respect`: Compliance with local laws, aversion to theft and unauthorized library edits.
-  10. `faith_devotion`: Spiritual reverence, prayer frequency, altar attendance.
+  1. `courage`: Willingness to face threats, defend kin, and stand firm in combat.
+  2. `empathy`: Altruism, generosity in allowances, and responsiveness to infant crying.
+  3. `ambition`: Drive to accumulate wealth, expand property deeds, and seek high office.
+  4. `discipline`: Diligence in vocational labor, adherence to schedules, and hygiene habits.
+  5. `curiosity`: Motivation to explore frontier chunks, read library lore, and discover recipes.
+  6. `devotion`: Religious reverence, prayer frequency, and loyalty to patron God-Mother.
+  7. `honesty`: Truthfulness in speech acts, aversion to theft, and compliance with contracts.
+  8. `out_group_trust`: Receptivity to other races, inter-species trade, and diplomatic goodwill.
+  9. `caution`: Risk aversion in hazardous terrain, financial prudence, and combat retreat.
+  10. `pride`: Self-regard, desire for honors and epithets, resistance to insults.
 
 ### Dynamic Coupling to `MoodState`
 Traits continuously modulate the agent's short-term emotional state:
-- **5 Discrete Moods:** `joy`, `anger`, `fear`, `gloom`, `calm`.
+- **5 Discrete Moods:** `calm`, `angry`, `grieving`, `fearful`, `inspired`.
 - **Logit Biases:**
-  - High `anger` + low `caution` biases towards `DEFEND_OR_ATTACK` and aggressive debate.
-  - High `joy` + high `agreeableness` biases towards `GREET`, `COURT`, and `COMFORT_OR_CARE_CHILD`.
-  - High `fear` biases strongly towards `FLEE_THREAT` and shelter seeking.
+  - High `angry` + low `caution` biases towards `DEFEND_OR_ATTACK` and aggressive debate.
+  - High `inspired` + high `empathy` biases towards `GREET`, `COURT`, and `COMFORT_OR_CARE_CHILD`.
+  - High `fearful` biases strongly towards `FLEE_THREAT` and shelter seeking.
+  - High `grieving` suppresses social initiatives and drives solitary prayer.
 
 ---
 

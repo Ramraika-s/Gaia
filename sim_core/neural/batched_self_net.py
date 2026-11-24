@@ -191,14 +191,16 @@ class BatchedAgentSelfNet(nn.Module):
         elif isinstance(slot_indices, (list, tuple)) and n > 0:
             first = int(slot_indices[0])
             last = int(slot_indices[-1])
-            if last - first == n - 1 and (n == 1 or int(slot_indices[1]) == first + 1):
+            if n == 1 or (
+                last - first == n - 1 and all(slot_indices[i] == first + i for i in range(n))
+            ):
                 use_slice = True
                 start_idx = first
                 end_idx = last + 1
         elif isinstance(slot_indices, torch.Tensor) and n > 0:
             first = int(slot_indices[0].item())
             last = int(slot_indices[-1].item())
-            if last - first == n - 1 and (n == 1 or int(slot_indices[1].item()) == first + 1):
+            if n == 1 or bool((slot_indices[1:] == slot_indices[:-1] + 1).all()):
                 use_slice = True
                 start_idx = first
                 end_idx = last + 1
@@ -213,13 +215,17 @@ class BatchedAgentSelfNet(nn.Module):
             b_out = self.b_out[start_idx:end_idx]
             h_prev = self.H[start_idx:end_idx]
         else:
-            w_ih = self.W_ih[slot_indices]
-            b_ih = self.b_ih[slot_indices]
-            w_hh = self.W_hh[slot_indices]
-            b_hh = self.b_hh[slot_indices]
-            w_out = self.W_out[slot_indices]
-            b_out = self.b_out[slot_indices]
-            h_prev = self.H[slot_indices]
+            if isinstance(slot_indices, (list, tuple)):
+                idx_t = torch.as_tensor(slot_indices, dtype=torch.long, device=self.device)
+            else:
+                idx_t = slot_indices
+            w_ih = self.W_ih[idx_t]
+            b_ih = self.b_ih[idx_t]
+            w_hh = self.W_hh[idx_t]
+            b_hh = self.b_hh[idx_t]
+            w_out = self.W_out[idx_t]
+            b_out = self.b_out[idx_t]
+            h_prev = self.H[idx_t]
 
         # Vectorized batch matrix multiplication
         gi = torch.bmm(x_self.unsqueeze(1), w_ih).squeeze(1) + b_ih  # (N, 96)
@@ -248,8 +254,10 @@ class BatchedAgentSelfNet(nn.Module):
             for b_idx in bad_batch_indices:
                 if use_slice or slot_indices is None:
                     bad_slot = start_idx + b_idx
-                else:
+                elif isinstance(slot_indices, torch.Tensor):
                     bad_slot = int(slot_indices[b_idx].item())
+                else:
+                    bad_slot = int(slot_indices[b_idx])
 
                 # Restore corrupted slot locally
                 with torch.no_grad():
@@ -281,8 +289,12 @@ class BatchedAgentSelfNet(nn.Module):
         # Update persistent working memory for healthy slots
         if use_slice:
             self.H[start_idx:end_idx] = h_next.detach()
-        else:
+        elif isinstance(slot_indices, torch.Tensor):
             self.H[slot_indices] = h_next.detach()
+        else:
+            self.H[torch.as_tensor(slot_indices, dtype=torch.long, device=self.device)] = (
+                h_next.detach()
+            )
 
         return out, h_next
 

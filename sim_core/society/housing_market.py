@@ -13,6 +13,7 @@ from typing import Any
 
 from sim_core.schemas import AgentRecord, BuildingRecord, SettlementRecord, Vec3
 from sim_core.society.economy import WorldBank
+from sim_core.society.property import resolve_probate_heir
 
 
 class HousingMarketEngine:
@@ -67,10 +68,11 @@ class HousingMarketEngine:
             # Candidate for home purchase
             # Find available for-sale residential buildings
             for_sale_blds = [
-                b for b in city_blds.values()
-                if b.for_sale and b.building_type in (
-                    "HOUSE_T1_COTTAGE", "HOUSE_T2_TOWNHOUSE", "HOUSE_T3_MANOR"
-                ) and agent.credits >= b.sale_price
+                b
+                for b in city_blds.values()
+                if b.for_sale
+                and b.building_type in ("HOUSE_T1_COTTAGE", "HOUSE_T2_TOWNHOUSE", "HOUSE_T3_MANOR")
+                and agent.credits >= b.sale_price
             ]
 
             if not for_sale_blds:
@@ -127,14 +129,16 @@ class HousingMarketEngine:
             if hasattr(self.engine, "adapter") and self.engine.adapter:
                 self.engine.adapter.sync_building_update(target_bld)
 
-            events.append({
-                "type": "HOUSE_PURCHASED",
-                "building_id": target_bld.building_id,
-                "buyer_id": agent.agent_id,
-                "seller_id": getattr(seller, "agent_id", "BANK"),
-                "price": price,
-                "tick": current_tick,
-            })
+            events.append(
+                {
+                    "type": "HOUSE_PURCHASED",
+                    "building_id": target_bld.building_id,
+                    "buyer_id": agent.agent_id,
+                    "seller_id": getattr(seller, "agent_id", "BANK"),
+                    "price": price,
+                    "tick": current_tick,
+                }
+            )
 
         # ---------------------------------------------------------------------
         # 2. In-Place Tier Upgrades (T1 -> T2 -> T3)
@@ -164,14 +168,16 @@ class HousingMarketEngine:
                     bld.sale_price = 340.0
                     if hasattr(self.engine, "adapter") and self.engine.adapter:
                         self.engine.adapter.sync_building_update(bld)
-                    events.append({
-                        "type": "HOUSE_UPGRADED",
-                        "building_id": bld.building_id,
-                        "owner_id": agent.agent_id,
-                        "new_tier": "HOUSE_T2_TOWNHOUSE",
-                        "fee": fee,
-                        "tick": current_tick,
-                    })
+                    events.append(
+                        {
+                            "type": "HOUSE_UPGRADED",
+                            "building_id": bld.building_id,
+                            "owner_id": agent.agent_id,
+                            "new_tier": "HOUSE_T2_TOWNHOUSE",
+                            "fee": fee,
+                            "tick": current_tick,
+                        }
+                    )
 
             # Townhouse to Manor upgrade (fee: 280 cr, requires >= 360 cr savings)
             elif bld.building_type == "HOUSE_T2_TOWNHOUSE" and agent.credits >= 360.0:
@@ -188,48 +194,44 @@ class HousingMarketEngine:
                     bld.sale_price = 600.0
                     if hasattr(self.engine, "adapter") and self.engine.adapter:
                         self.engine.adapter.sync_building_update(bld)
-                    events.append({
-                        "type": "HOUSE_UPGRADED",
-                        "building_id": bld.building_id,
-                        "owner_id": agent.agent_id,
-                        "new_tier": "HOUSE_T3_MANOR",
-                        "fee": fee,
-                        "tick": current_tick,
-                    })
+                    events.append(
+                        {
+                            "type": "HOUSE_UPGRADED",
+                            "building_id": bld.building_id,
+                            "owner_id": agent.agent_id,
+                            "new_tier": "HOUSE_T3_MANOR",
+                            "fee": fee,
+                            "tick": current_tick,
+                        }
+                    )
 
         # ---------------------------------------------------------------------
         # 3. Probate & Escheatment for Deceased Homeowners
         # ---------------------------------------------------------------------
         for bld in list(city_blds.values()):
-            if not bld.owner_id or bld.owner_id == bld.city_id or bld.building_type in (
-                "GODMOTHER_PALACE", "CITY_GATE", "WALL_SEGMENT"
+            if (
+                not bld.owner_id
+                or bld.owner_id == bld.city_id
+                or bld.building_type in ("GODMOTHER_PALACE", "CITY_GATE", "WALL_SEGMENT")
             ):
                 continue
 
-            owner = agents.get(bld.owner_id)
-            if owner and owner.alive:
+            # If building has a placeholder owner not in agents (e.g. "citizen_*"),
+            # release it to for_sale=True so homeless agents can purchase it
+            if bld.owner_id not in agents:
+                if bld.owner_id.startswith("citizen_"):
+                    bld.for_sale = True
+                    bld.owner_id = None
+                    bld.owner_name = None
                 continue
 
-            # Owner is dead or missing: execute probate cascade
+            owner = agents[bld.owner_id]
+            if owner.alive:
+                continue
+
+            # Owner is dead: execute unified 4-tier probate cascade
             deceased = owner
-            heir: AgentRecord | None = None
-
-            if deceased:
-                # 1. Living spouse
-                if deceased.spouse_id and deceased.spouse_id in agents:
-                    cand = agents[deceased.spouse_id]
-                    if cand.alive:
-                        heir = cand
-
-                # 2. Living children
-                if not heir:
-                    children = [
-                        a for a in agents.values()
-                        if a.alive and deceased.agent_id in a.parent_ids
-                    ]
-                    if children:
-                        adult_children = [c for c in children if c.stage in ("ADULT", "ELDER")]
-                        heir = max(adult_children or children, key=lambda c: c.age_ticks)
+            heir = resolve_probate_heir(deceased, agents)
 
             if heir:
                 # Heir inherits property
@@ -239,27 +241,32 @@ class HousingMarketEngine:
                     f"{getattr(heir, 'dynasty_surname', 'Founder')}"
                 )
                 heir.home_building_id = bld.building_id
-                events.append({
-                    "type": "HOUSE_PROBATE_INHERITED",
-                    "building_id": bld.building_id,
-                    "heir_id": heir.agent_id,
-                    "tick": current_tick,
-                })
+                events.append(
+                    {
+                        "type": "HOUSE_PROBATE_INHERITED",
+                        "building_id": bld.building_id,
+                        "heir_id": heir.agent_id,
+                        "tick": current_tick,
+                    }
+                )
             else:
                 # Escheatment: property returns to municipal market for sale
                 bld.owner_id = None
                 bld.owner_name = None
                 bld.for_sale = True
                 bld.sale_price = (
-                    180.0 if "COTTAGE" in bld.building_type
+                    180.0
+                    if "COTTAGE" in bld.building_type
                     else (320.0 if "TOWNHOUSE" in bld.building_type else 580.0)
                 )
-                events.append({
-                    "type": "HOUSE_ESCHEATMENT_FOR_SALE",
-                    "building_id": bld.building_id,
-                    "sale_price": bld.sale_price,
-                    "tick": current_tick,
-                })
+                events.append(
+                    {
+                        "type": "HOUSE_ESCHEATMENT_FOR_SALE",
+                        "building_id": bld.building_id,
+                        "sale_price": bld.sale_price,
+                        "tick": current_tick,
+                    }
+                )
 
             if hasattr(self.engine, "adapter") and self.engine.adapter:
                 self.engine.adapter.sync_building_update(bld)
@@ -286,15 +293,29 @@ class HousingMarketEngine:
         city_blds = self.engine.city_layout.buildings
 
         # Identify candidate pioneers: adults without homes with >= 120 cr
-        candidates = [
-            a for a in agents.values()
-            if a.alive and a.stage in ("ADULT", "ELDER")
+        eligible = [
+            a
+            for a in agents.values()
+            if a.alive
+            and a.stage in ("ADULT", "ELDER")
             and (not a.home_building_id or a.home_building_id not in city_blds)
             and a.credits >= 120.0
         ]
 
-        if not candidates:
+        if not eligible:
             return spawned_buildings
+
+        # Prefer ambitious / curious candidates if any exist, fallback to eligible
+        ambitious_candidates = [
+            a
+            for a in eligible
+            if a.personality is not None
+            and (
+                getattr(a.personality, "ambition", 0.0) >= 0.65
+                or getattr(a.personality, "curiosity", 0.0) >= 0.65
+            )
+        ]
+        candidates = ambitious_candidates if ambitious_candidates else eligible
 
         # Pick 1-2 pioneers per step
         sample_count = min(len(candidates), 2)
@@ -352,6 +373,21 @@ class HousingMarketEngine:
             self.frontier_buildings[bld_id] = pioneer_bld
             pioneer.home_building_id = bld_id
 
+            # Register footprint in navigation engine so agents walk around cabins
+            if hasattr(self.engine, "navigation") and self.engine.navigation:
+                door_dist = 8.0 + 1.5
+                door_x = round(bx + door_dist * math.cos(rot_y), 2)
+                door_z = round(bz + door_dist * math.sin(rot_y), 2)
+                self.engine.navigation.register_building_footprint(
+                    name=bld_id,
+                    cx=round(bx, 2),
+                    cz=round(bz, 2),
+                    radius=8.0,
+                    door_x=door_x,
+                    door_z=door_z,
+                    building_type="HOUSE_T1_COTTAGE",
+                )
+
             # Register parcel deed
             if hasattr(self.engine, "property_mgr") and self.engine.property_mgr:
                 self.engine.city_layout._register_parcel_deed(
@@ -383,18 +419,24 @@ class HousingMarketEngine:
             x = r * math.cos(ang)
             z = r * math.sin(ang)
 
-            # Heightmap elevation lookup
+            # Exclude Demon volcanic caldera
+            if math.hypot(x + 2400.0, z + 1650.0) < 600.0:
+                continue
+
+            # Exclude proximity to the Ring Road
+            if abs(r - 1150.0) < 35.0:
+                continue
+
+            # Heightmap elevation and slope lookup
             y = 12.0
-            if (
-                heightmap is not None
-                and heightmap.data is not None
-                and heightmap.data.max() > 0.0
-            ):
+            if heightmap is not None and heightmap.data is not None and heightmap.data.max() > 0.0:
                 try:
                     y = float(heightmap.get_elevation(x, z))
+                    slope = float(heightmap.get_slope(x, z))
                 except Exception:
                     y = 12.0
-                if y < 4.0:
+                    slope = 0.0
+                if y < 4.0 or slope >= 0.35:
                     continue
             else:
                 y = 12.0
@@ -453,7 +495,7 @@ class HousingMarketEngine:
                     tier="VILLAGE",
                     founder_id=cluster[0].owner_id or "founder",
                     center_pos=Vec3(x=round(cx, 2), y=round(cy, 2), z=round(cz, 2)),
-                    treasury_credits=100.0,
+                    treasury_credits=0.0,
                     founded_tick=current_tick,
                 )
 
@@ -464,10 +506,21 @@ class HousingMarketEngine:
                     if hasattr(self.engine, "adapter") and self.engine.adapter:
                         self.engine.adapter.sync_building_update(b)
 
-                # Register in engine border manager if available
+                # Register in political engine as VILLAGE tier polity
+                if hasattr(self.engine, "political_engine") and self.engine.political_engine:
+                    from sim_core.society.politics import Polity
+
+                    v_polity = Polity(
+                        settlement_id=v_id,
+                        name=v_name,
+                        tier="VILLAGE",
+                        regime_type="CHIEFDOM",
+                        leader_id=village.founder_id,
+                        treasury_credits=0.0,
+                    )
+                    self.engine.political_engine.register_polity(v_polity)
+
+                # Register in engine border manager
                 if hasattr(self.engine, "border_mgr") and self.engine.border_mgr:
-                    try:
-                        self.engine.border_mgr.register_settlement(village)
-                    except Exception:
-                        pass
+                    self.engine.border_mgr.register_settlement(village)
                 break

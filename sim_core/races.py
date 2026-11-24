@@ -1,7 +1,7 @@
 """
 sim_core/races.py
 Biological specifications, Master Multiplier Table, and RaceProfile registry
-for the 4 distinct races (HUMAN, ELF, DRAGON, BEASTHUMAN) and 2 biological genders.
+for the 5 distinct races (HUMAN, ELF, DRAGON, BEASTHUMAN, DEMON) and 2 biological genders.
 """
 
 from __future__ import annotations

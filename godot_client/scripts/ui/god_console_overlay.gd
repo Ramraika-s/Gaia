@@ -38,16 +38,40 @@ func _connect_bridge_signals() -> void:
 		bridge.god_command_result_received.connect(_on_command_result_received)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_QUOTELEFT or event.keycode == KEY_F1:
-			toggle_console()
-		elif event.keycode == KEY_ESCAPE and visible:
+func is_modal_open() -> bool:
+	return visible
+
+
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+
+	var key_ev: InputEventKey = event as InputEventKey
+	var is_backtick: bool = (
+		key_ev.keycode == KEY_QUOTELEFT
+		or key_ev.physical_keycode == KEY_QUOTELEFT
+		or key_ev.unicode == 96
+	)
+	var is_f1: bool = (key_ev.keycode == KEY_F1 or key_ev.physical_keycode == KEY_F1)
+	if is_backtick or is_f1:
+		if not visible and UiStateManager.instance:
+			if UiStateManager.instance.is_blocking_modal_open() or UiStateManager.instance.is_text_input_focused():
+				return
+		toggle_console()
+		get_viewport().set_input_as_handled()
+	elif visible:
+		var is_esc: bool = (key_ev.keycode == KEY_ESCAPE or key_ev.physical_keycode == KEY_ESCAPE)
+		var is_up: bool = (key_ev.keycode == KEY_UP or key_ev.physical_keycode == KEY_UP)
+		var is_down: bool = (key_ev.keycode == KEY_DOWN or key_ev.physical_keycode == KEY_DOWN)
+		if is_esc:
 			close_console()
-		elif visible and event.keycode == KEY_UP:
+			get_viewport().set_input_as_handled()
+		elif is_up:
 			_navigate_history(-1)
-		elif visible and event.keycode == KEY_DOWN:
+			get_viewport().set_input_as_handled()
+		elif is_down:
 			_navigate_history(1)
+			get_viewport().set_input_as_handled()
 
 
 func open_console() -> void:
@@ -60,6 +84,14 @@ func close_console() -> void:
 	visible = false
 	console_closed.emit()
 	cmd_input.release_focus()
+
+
+func close_modal() -> void:
+	close_console()
+
+
+func open_modal(_tab_idx: int = 0) -> void:
+	open_console()
 
 
 func toggle_console() -> void:

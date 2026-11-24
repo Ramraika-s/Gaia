@@ -12,12 +12,14 @@ import random
 import uuid
 from typing import Any
 
+from sim_core.brains.personality import MoodState, generate_personality_vector
 from sim_core.config import TICKS_PER_GAME_DAY
 from sim_core.divine.hierarchy import RACE_TO_DEITY_SLOT
 from sim_core.races import (
     CROSS_SPECIES_BIRTH_SURVIVAL_CHANCE,
     CROSS_SPECIES_CONCEPTION_CHANCE,
-    RACE_REGISTRY,
+    BeasthumanSubLineage,
+    get_race_profile,
 )
 from sim_core.schemas import (
     AgentRecord as AgentState,
@@ -50,15 +52,20 @@ class LifecycleManager:
         biological_age_years = (age_days / (6.0 * L)) * 18.0
         where ADULT = 18 biological years, and 10 years old = 3.333 * L game days.
         """
-        profile = RACE_REGISTRY[agent.race]
+        profile = get_race_profile(agent.race, agent.sub_lineage)
         lifespan_l = max(0.1, profile.lifespan_multiplier)
         age_days = agent.age_ticks / float(TICKS_PER_GAME_DAY)
         return (age_days / (6.0 * lifespan_l)) * 18.0
 
     @staticmethod
-    def get_max_health_for_stage(race: RaceId, stage: str, is_true_dragon: bool = False) -> float:
+    def get_max_health_for_stage(
+        race: RaceId,
+        stage: str,
+        is_true_dragon: bool = False,
+        sub_lineage: BeasthumanSubLineage | None = None,
+    ) -> float:
         """Calculates stage-scaled max health multiplied by race profile."""
-        profile = RACE_REGISTRY[race]
+        profile = get_race_profile(race, sub_lineage)
         if is_true_dragon and race == "DRAGON":
             return profile.true_dragon_health
         base = BASE_MAX_HP_BY_STAGE.get(stage, 100.0)
@@ -80,7 +87,7 @@ class LifecycleManager:
         if not agent.alive:
             return
 
-        profile = RACE_REGISTRY[agent.race]
+        profile = get_race_profile(agent.race, agent.sub_lineage)
         lifespan_l = max(0.1, profile.lifespan_multiplier)
 
         # 1. Aging & Stage Gate Transitions
@@ -95,7 +102,9 @@ class LifecycleManager:
                 and agent.skills.get("self_care", 0.0) >= 0.35
             ):
                 agent.stage = "CHILD"
-                agent.max_health = cls.get_max_health_for_stage(agent.race, "CHILD")
+                agent.max_health = cls.get_max_health_for_stage(
+                    agent.race, "CHILD", sub_lineage=agent.sub_lineage
+                )
                 agent.health = min(agent.health + 30.0, agent.max_health)
 
         elif agent.stage == "CHILD":
@@ -105,7 +114,9 @@ class LifecycleManager:
             forage = agent.skills.get("forage", 0.0)
             if age_days >= 6.0 * lifespan_l and ((walk + care + forage) / 3.0) >= 0.55:
                 agent.stage = "ADULT"
-                agent.max_health = cls.get_max_health_for_stage(agent.race, "ADULT")
+                agent.max_health = cls.get_max_health_for_stage(
+                    agent.race, "ADULT", sub_lineage=agent.sub_lineage
+                )
                 agent.health = agent.max_health
                 if agent.race == "DRAGON" and agent.dragon_form is None:
                     agent.dragon_form = "HUMANOID_DRAGON"
@@ -114,7 +125,9 @@ class LifecycleManager:
             # Promotion to ELDER: age >= 24*L
             if age_days >= 24.0 * lifespan_l:
                 agent.stage = "ELDER"
-                agent.max_health = cls.get_max_health_for_stage(agent.race, "ELDER")
+                agent.max_health = cls.get_max_health_for_stage(
+                    agent.race, "ELDER", sub_lineage=agent.sub_lineage
+                )
                 agent.health = min(agent.health, agent.max_health)
 
         # 2. Cooldowns
@@ -261,7 +274,7 @@ class LifecycleManager:
         conception_chance = CROSS_SPECIES_CONCEPTION_CHANCE if is_cross_species else 1.00
         conceived = rng.random() < conception_chance
 
-        mother_profile = RACE_REGISTRY[mother.race]
+        mother_profile = get_race_profile(mother.race, mother.sub_lineage)
         base_cooldown = int(1.0 * mother_profile.breeding_cooldown_mult * TICKS_PER_GAME_DAY)
 
         if not conceived:
@@ -390,6 +403,26 @@ class LifecycleManager:
                 max(0.0, min(1.0, 0.65 + rng.gauss(0.0, 0.08))), 3
             )
 
+        # Generate personality inheriting from parents and synchronize devotion
+        parent_pvs = []
+        if getattr(mother, "personality", None) is not None:
+            parent_pvs.append(mother.personality)
+        if father is not None and getattr(father, "personality", None) is not None:
+            parent_pvs.append(father.personality)
+
+        child_personality = generate_personality_vector(dominant_race, parents=parent_pvs, rng=rng)
+        child_mood = MoodState(calm=0.8)
+        if base_faith > 0.0:
+            child_personality.devotion = round(max(0.0, min(1.0, base_faith)), 3)
+            traits["faith_devotion"] = child_personality.devotion
+        else:
+            child_personality.devotion = round(child_personality.devotion, 3)
+            traits["faith_devotion"] = child_personality.devotion
+
+        newborn_max_health = cls.get_max_health_for_stage(
+            dominant_race, "INFANT", sub_lineage=sub_lineage
+        )
+
         child = AgentState(
             agent_id=child_id,
             slot_idx=0,
@@ -405,8 +438,8 @@ class LifecycleManager:
             skin_hsv=blend_hsv,
             stage="INFANT",
             age_ticks=0,
-            health=40.0,
-            max_health=40.0,
+            health=newborn_max_health,
+            max_health=newborn_max_health,
             hunger=100.0,
             stamina=100.0,
             parent_ids=parents,
@@ -415,6 +448,8 @@ class LifecycleManager:
             religion_id=mother.religion_id,
             pos=Vec3(x=mother.pos.x, y=mother.pos.y, z=mother.pos.z),
             traits=traits,
+            personality=child_personality,
+            mood=child_mood,
         )
         return True, child, "BIRTH_SUCCESS"
 

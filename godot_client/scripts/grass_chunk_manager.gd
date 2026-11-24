@@ -117,6 +117,8 @@ func _create_grass_resources() -> void:
 	st.add_index(4); st.add_index(6); st.add_index(5)
 	st.add_index(4); st.add_index(7); st.add_index(6)
 
+	if _grass_material:
+		st.set_material(_grass_material)
 	_grass_mesh = st.commit()
 
 
@@ -258,6 +260,10 @@ func _populate_chunk(mmi: MultiMeshInstance3D, cx: int, cz: int) -> void:
 		# 6. Radial Highway and Ring Road exclusion
 		var d_ring: float = abs(r_origin - 1150.0)
 		if d_ring < 8.0:
+			continue
+
+		# 7. Shared Road Mask exclusion (Highways, Plazas, Paved Paths)
+		if TerrainHeightSampler.get_road_weight(gx, gz) > 0.15:
 			continue
 
 		# Valid blade instance

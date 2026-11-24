@@ -366,17 +366,86 @@ def generate_heightmap() -> None:
     smooth_falloff = t_falloff * t_falloff * (3.0 - 2.0 * t_falloff)
     elevation[r0_falloff] = 24.0 * (1.0 - smooth_falloff) + elevation[r0_falloff] * smooth_falloff
 
-    # Mark Acropolis core and plaza on road mask
-    road_mask[dist_origin <= 360.0] = 1.0
-    road_mask[r0_falloff] = np.maximum(road_mask[r0_falloff], 1.0 - smooth_falloff)
-
-    # Re-enforce the 4 Institutional Pads in outer plaza (y = 24.0m)
+    # Mark structured Acropolis ceremonial roads & plazas (keeps royal lawns green!)
+    # 1. Palace Core Plateau (r <= 95m)
+    road_mask[dist_origin <= 95.0] = 1.0
+    # 2. Outer Acropolis Promenade Ring (228m <= r <= 252m)
+    acrop_ring_d = np.abs(dist_origin - 240.0)
+    acrop_ring_zone = acrop_ring_d <= 12.0
+    t_acrop = np.clip((acrop_ring_d[acrop_ring_zone] - 6.0) / 6.0, 0.0, 1.0)
+    road_mask[acrop_ring_zone] = np.maximum(
+        road_mask[acrop_ring_zone], 1.0 - (t_acrop * t_acrop * (3.0 - 2.0 * t_acrop))
+    )
+    # 3. South Ceremonial Knight Avenue ((0, 95) -> (0, 360), width 14m)
+    d_knight, _ = dist_to_segment(grid_x, grid_z, 0.0, 95.0, 0.0, 360.0)
+    knight_zone = d_knight <= 10.0
+    t_kn = np.clip((d_knight[knight_zone] - 6.0) / 4.0, 0.0, 1.0)
+    road_mask[knight_zone] = np.maximum(
+        road_mask[knight_zone], 1.0 - (t_kn * t_kn * (3.0 - 2.0 * t_kn))
+    )
+    # 4. 4 Institutional Plaza Avenues & 5 Radial Ceremonial Spokes inside Acropolis
     for _key, pad in RING_0_PADS.items():
         px, pz = pad["x"], pad["z"]
+        if abs(px) > 1.0 or abs(pz) > 1.0:
+            d_inst, _ = dist_to_segment(grid_x, grid_z, 0.0, 0.0, px, pz)
+            inst_zone = d_inst <= 9.0
+            t_inst = np.clip((d_inst[inst_zone] - 5.0) / 4.0, 0.0, 1.0)
+            road_mask[inst_zone] = np.maximum(
+                road_mask[inst_zone], 1.0 - (t_inst * t_inst * (3.0 - 2.0 * t_inst))
+            )
         pad_dist = np.sqrt((grid_x - px) ** 2 + (grid_z - pz) ** 2)
         pad_inner = pad_dist <= pad["radius"]
         elevation[pad_inner] = pad["target_h"]
         road_mask[pad_inner] = 1.0
+
+    for _key, city in RING_1_CITIES.items():
+        cx, cz = city["x"], city["z"]
+        ang = math.atan2(cz, cx)
+        d_spoke, _ = dist_to_segment(
+            grid_x, grid_z, 0.0, 0.0, 362.0 * math.cos(ang), 362.0 * math.sin(ang)
+        )
+        spoke_zone = d_spoke <= 9.0
+        t_sp = np.clip((d_spoke[spoke_zone] - 5.0) / 4.0, 0.0, 1.0)
+        road_mask[spoke_zone] = np.maximum(
+            road_mask[spoke_zone], 1.0 - (t_sp * t_sp * (3.0 - 2.0 * t_sp))
+        )
+
+    # 6b. Ring 1 City Urban Street Grids (100% road_mask only, zero elevation delta!)
+    for _key, city in RING_1_CITIES.items():
+        cx, cz = city["x"], city["z"]
+        dist_city = np.sqrt((grid_x - cx) ** 2 + (grid_z - cz) ** 2)
+        # Inner Palace Plaza (r <= 52m, feather to 60m)
+        city_plaza = dist_city <= 60.0
+        t_plaza = np.clip((dist_city[city_plaza] - 50.0) / 10.0, 0.0, 1.0)
+        road_mask[city_plaza] = np.maximum(
+            road_mask[city_plaza], 1.0 - (t_plaza * t_plaza * (3.0 - 2.0 * t_plaza))
+        )
+        # Mid City Ring Street (r = 148m)
+        d_mid = np.abs(dist_city - 148.0)
+        mid_zone = d_mid <= 7.0
+        t_mid = np.clip((d_mid[mid_zone] - 3.5) / 3.5, 0.0, 1.0)
+        road_mask[mid_zone] = np.maximum(
+            road_mask[mid_zone], 0.95 * (1.0 - (t_mid * t_mid * (3.0 - 2.0 * t_mid)))
+        )
+        # Outer Wall Perimeter Promenade (r = 236m..244m)
+        d_gate_ring = np.abs(dist_city - 240.0)
+        gate_ring_zone = d_gate_ring <= 8.0
+        t_gr = np.clip((d_gate_ring[gate_ring_zone] - 4.0) / 4.0, 0.0, 1.0)
+        road_mask[gate_ring_zone] = np.maximum(
+            road_mask[gate_ring_zone], 0.85 * (1.0 - (t_gr * t_gr * (3.0 - 2.0 * t_gr)))
+        )
+        # 4 Cross-Axis Main Boulevards (7m half-width + feather to 11m)
+        main_angle = math.atan2(-cz, -cx)
+        for q in range(4):
+            b_ang = main_angle + q * (math.pi * 0.5)
+            bx = cx + 245.0 * math.cos(b_ang)
+            bz = cz + 245.0 * math.sin(b_ang)
+            d_blvd, _ = dist_to_segment(grid_x, grid_z, cx, cz, bx, bz)
+            blvd_zone = d_blvd <= 11.0
+            t_bl = np.clip((d_blvd[blvd_zone] - 6.5) / 4.5, 0.0, 1.0)
+            road_mask[blvd_zone] = np.maximum(
+                road_mask[blvd_zone], 1.0 - (t_bl * t_bl * (3.0 - 2.0 * t_bl))
+            )
 
     # 7. Carve Natural Rivers (Ring 2)
     # 3 Rivers flowing down to ocean with riverbed y < 0.0m
@@ -507,13 +576,13 @@ def generate_heightmap() -> None:
     print(f"[+] Saved {road_mask_path} ({road_mask_path.stat().st_size / 1024:.1f} KB)")
 
     # 13. Save Biome Splat Map (RGBA)
-    # R: Plains/Neutral/Roads, G: Forest/Elf Highlands, B: Dragon Obsidian, A: Demon Ashland
+    # R: Beasthuman Rugged Taiga & Steppes, G: Elf Highlands, B: Dragon Obsidian, A: Demon Ashland
     splat = np.zeros((RESOLUTION, RESOLUTION, 4), dtype=np.uint8)
     # Normalize weights
-    r_chan = np.clip((w_human + (dist_origin < 1200.0) * 0.7 + road_mask) * 255.0, 0, 255)
+    r_chan = np.clip(w_beast * 255.0, 0, 255)
     g_chan = np.clip(w_elf * 255.0, 0, 255)
     b_chan = np.clip(w_dragon * 255.0, 0, 255)
-    a_chan = np.clip((w_demon + w_beast * 0.7) * 255.0, 0, 255)
+    a_chan = np.clip(w_demon * 255.0, 0, 255)
 
     splat[:, :, 0] = r_chan.astype(np.uint8)
     splat[:, :, 1] = g_chan.astype(np.uint8)

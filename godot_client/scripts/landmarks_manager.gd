@@ -133,17 +133,17 @@ func update_wtc_board(data: Dictionary) -> void:
 	var money_supply: float = float(data.get("money_supply", data.get("circulating_credits", 1000000.0)))
 	var commodities: Dictionary = data.get("commodities", data.get("prices", {}))
 
-	var grain: float = float(commodities.get("grain", 10.0 * cpi))
-	var timber: float = float(commodities.get("timber", 15.0 * cpi))
-	var stone: float = float(commodities.get("stone", 12.0 * cpi))
-	var iron: float = float(commodities.get("iron", 25.0 * cpi))
-	var herbs: float = float(commodities.get("herbs", 18.0 * cpi))
-	var meat: float = float(commodities.get("meat", 20.0 * cpi))
+	var food: float = float(commodities.get("food", commodities.get("grain", 1.0 * cpi)))
+	var wood: float = float(commodities.get("wood", commodities.get("timber", 1.5 * cpi)))
+	var stone: float = float(commodities.get("stone", 2.0 * cpi))
+	var iron: float = float(commodities.get("iron", 4.0 * cpi))
+	var tools: float = float(commodities.get("tools", 6.5 * cpi))
+	var land_deeds: float = float(commodities.get("land_deeds", 50.0 * cpi))
 
 	var text: String = "=== WORLD TRADE CENTRE (WTC) ===\n"
 	text += "CPI Inflation Index: %.3f | Money Supply: %s c\n" % [cpi, String.num(money_supply, 0)]
-	text += "Grain: %.1fc  •  Timber: %.1fc  •  Stone: %.1fc\n" % [grain, timber, stone]
-	text += "Iron:  %.1fc  •  Herbs:  %.1fc  •  Meat:  %.1fc\n" % [iron, herbs, meat]
+	text += "Food: %.1fc  •  Wood: %.1fc  •  Stone: %.1fc\n" % [food, wood, stone]
+	text += "Iron: %.1fc  •  Tools: %.1fc  •  Deeds: %.1fc\n" % [iron, tools, land_deeds]
 	text += "Reserve: 100% Closed-Loop Solvency (World Bank)"
 
 	price_board_label.text = text

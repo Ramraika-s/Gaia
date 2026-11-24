@@ -382,10 +382,10 @@ def test_rich_cli_and_duckdb_read_only_analytics(tmp_path: Path) -> None:
     assert "SUCCESS" in approve_out
     assert engine.governance_engine.live_engine_overrides["MAX_ORACLES"] == 4.0
 
-    # 7. Intervene: save
+    # 7. Intervene: save (manual save does not advance calendar day)
     save_out = console.execute_command("save")
     assert "Atomic save committed successfully" in save_out
-    assert engine.current_day == 2
+    assert engine.current_day == 1
 
     # 8. DuckDB Analytics (read-only query on civilization.db)
     analytics_out = console.execute_command("analytics demographics")
@@ -397,4 +397,4 @@ def test_rich_cli_and_duckdb_read_only_analytics(tmp_path: Path) -> None:
     engine.step_tick()
     save_out2 = console.execute_command("save")
     assert "Atomic save committed successfully" in save_out2
-    assert engine.current_day == 3
+    assert engine.current_day == 1

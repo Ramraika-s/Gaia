@@ -8,6 +8,7 @@ Follows ARCHITECTURE.md Section 4 and GODOT_CLIENT_AND_ASSETS_SPEC.md.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import uuid
@@ -16,6 +17,14 @@ from typing import TYPE_CHECKING, Any, Final
 import numpy as np
 
 from sim_core.bridge.base import WorldAdapter
+from sim_core.bridge.protocol import (
+    PROTOCOL_VERSION,
+    build_world_time_weather_payload,
+    extract_god_command_params,
+    normalize_codex_edit_payload,
+    normalize_library_edit_payload,
+    resolve_library_entry_id,
+)
 from sim_core.schemas import (
     CommitProposal,
     FatalityRecord,
@@ -96,6 +105,9 @@ class GodotWebSocketBridge(WorldAdapter):
         self._server_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
+        # Tracked background tasks (slow DIALOGUE_REQUEST inference) mapped to owning client
+        self._background_tasks: dict[asyncio.Task[Any], Any] = {}
+
         # Vectorized contiguous position and attribute buffer for binary packing
         self.capacity: int = initial_capacity
         self.positions: np.ndarray = np.zeros((self.capacity, 6), dtype="<f4")
@@ -103,6 +115,13 @@ class GodotWebSocketBridge(WorldAdapter):
         self.slot_to_agent_id: dict[int, str] = {}
         self.agent_id_to_slot: dict[str, int] = {}
         self.cli: Any = None
+
+    def reset(self) -> None:
+        """Clears all active slots and streaming buffers for full restart or rewind."""
+        self.positions.fill(0.0)
+        self.active_mask.fill(False)
+        self.slot_to_agent_id.clear()
+        self.agent_id_to_slot.clear()
 
     def get_book_state_payload(self) -> dict[str, Any]:
         """Packs world_library and divine_codex state + pending proposals."""
@@ -178,9 +197,9 @@ class GodotWebSocketBridge(WorldAdapter):
 
         race_str = metadata.get("race", "HUMAN")
         stage_str = metadata.get("stage", "INFANT")
-        x = float(metadata.get("x", 0.0))
-        y = float(metadata.get("y", 0.0))
-        z = float(metadata.get("z", 0.0))
+        x = float(metadata.get("x") or 0.0)
+        y = float(metadata.get("y") or 0.0)
+        z = float(metadata.get("z") or 0.0)
 
         flags = 0
         if metadata.get("crying", False):
@@ -189,9 +208,9 @@ class GodotWebSocketBridge(WorldAdapter):
             flags |= FLAG_IS_ORACLE
         if metadata.get("dragon_form") == "TRUE_DRAGON":
             flags |= FLAG_TRUE_DRAGON
-        if float(metadata.get("injured", 0.0)) > 0.0:
+        if float(metadata.get("injured") or 0.0) > 0.0:
             flags |= FLAG_INJURED
-        if float(metadata.get("illness", 0.0)) > 0.0:
+        if float(metadata.get("illness") or 0.0) > 0.0:
             flags |= FLAG_ILLNESS
 
         self.positions[slot_idx, 0] = x
@@ -223,8 +242,7 @@ class GodotWebSocketBridge(WorldAdapter):
             self.positions[slot_idx, 0] = x
             self.positions[slot_idx, 1] = y
             self.positions[slot_idx, 2] = z
-            if packed_flags != 0:
-                self.positions[slot_idx, 5] = float(packed_flags)
+            self.positions[slot_idx, 5] = float(packed_flags)
 
     def sync_bubble(self, pooled_agents: list[dict[str, Any]]) -> None:
         """Dispatches BUBBLE_SYNC JSON event for the 60-120 pooled 3D rigs."""
@@ -238,6 +256,31 @@ class GodotWebSocketBridge(WorldAdapter):
             payload = {"type": "DEITY_SYNC", "deities": deities}
         self.send_json_broadcast(payload)
 
+    def _schedule_client_send(self, client: Any, payload: str | bytes) -> asyncio.Task[Any] | None:
+        """Schedules non-blocking send with safe done-callback error handling and cleanup."""
+        coro = client.send(payload)
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(coro)
+        except (RuntimeError, Exception) as exc:
+            logger.debug("Cannot schedule client send (event loop unavailable): %s", exc)
+            if inspect.iscoroutine(coro):
+                coro.close()
+            return None
+
+        def _on_send_done(t: asyncio.Task[Any]) -> None:
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc:
+                logger.debug("WebSocket client send failed: %s; removing client", exc)
+                self.clients.discard(client)
+                if not self.clients and self.engine:
+                    self.engine.god_presence.set_active(False)
+
+        task.add_done_callback(_on_send_done)
+        return task
+
     def sync_weather_time(
         self,
         day: int,
@@ -247,18 +290,14 @@ class GodotWebSocketBridge(WorldAdapter):
         weather_details: dict[str, Any] | None = None,
     ) -> None:
         """Dispatches WORLD_TIME_WEATHER JSON event for Sky3D and global shaders."""
-        payload: dict[str, Any] = {
-            "day": day,
-            "time_of_day": time_of_day,
-            "season_progress": season_progress,
-            "weather": weather,
-        }
-        if weather_details:
-            payload["weather_details"] = weather_details
-        self.emit_event(
-            "WORLD_TIME_WEATHER",
-            payload,
+        payload = build_world_time_weather_payload(
+            day=day,
+            time_of_day_hours=time_of_day,
+            season_progress=season_progress,
+            weather=weather,
+            weather_details=weather_details,
         )
+        self.send_json_broadcast(payload)
 
     def emit_event(self, event_type: str, payload: dict[str, Any]) -> None:
         """Emits a discrete JSON event to all connected Godot clients."""
@@ -278,10 +317,7 @@ class GodotWebSocketBridge(WorldAdapter):
         if not self.clients:
             return
         for client in list(self.clients):
-            try:
-                asyncio.create_task(client.send(data))
-            except RuntimeError:
-                pass
+            self._schedule_client_send(client, data)
 
     # =========================================================================
     # High-Performance Binary Serialization (< 2.0 ms)
@@ -319,31 +355,48 @@ class GodotWebSocketBridge(WorldAdapter):
             return
         payload = json.dumps(msg)
         for client in list(self.clients):
-            try:
-                asyncio.create_task(client.send(payload))
-            except RuntimeError:
-                pass
+            self._schedule_client_send(client, payload)
 
     async def broadcast_binary_async(self, data: bytes) -> None:
-        """Async broadcast of binary frames."""
+        """Async broadcast of binary frames with safe error handling and client cleanup."""
         if not self.clients:
             return
+        dead_clients: list[Any] = []
         for client in list(self.clients):
             try:
                 await client.send(data)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "WebSocket client async binary send failed: %s; marking for removal", exc
+                )
+                dead_clients.append(client)
+
+        if dead_clients:
+            for client in dead_clients:
+                self.clients.discard(client)
+            if not self.clients and self.engine:
+                self.engine.god_presence.set_active(False)
 
     async def broadcast_json_async(self, msg: dict[str, Any]) -> None:
-        """Async broadcast of JSON payloads."""
+        """Async broadcast of JSON payloads with safe error handling and client cleanup."""
         if not self.clients:
             return
         payload = json.dumps(msg)
+        dead_clients: list[Any] = []
         for client in list(self.clients):
             try:
                 await client.send(payload)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "WebSocket client async JSON send failed: %s; marking for removal", exc
+                )
+                dead_clients.append(client)
+
+        if dead_clients:
+            for client in dead_clients:
+                self.clients.discard(client)
+            if not self.clients and self.engine:
+                self.engine.god_presence.set_active(False)
 
     # =========================================================================
     # Inbound Message Dispatch & Authorization
@@ -394,7 +447,7 @@ class GodotWebSocketBridge(WorldAdapter):
                             "type": "HANDSHAKE_ACK",
                             "status": "CONNECTED",
                             "server": "GAIA_CIVILIZATION_ENGINE",
-                            "version": "3.0.0",
+                            "version": PROTOCOL_VERSION,
                         }
                     )
                 )
@@ -409,7 +462,9 @@ class GodotWebSocketBridge(WorldAdapter):
             elif msg_type == "REQUEST_DEITY_SYNC":
                 await client.send(json.dumps(self.get_deity_sync_payload()))
             elif msg_type == "DIALOGUE_REQUEST":
-                await self._handle_dialogue_request(client, data)
+                # Slow LLM inference must NEVER block the receive loop (GOD_STATE / GOD_COMMAND
+                # / binary streaming keep flowing); reply is delivered by a tracked task.
+                self._spawn_background_task(self._handle_dialogue_request(client, data), client)
             elif msg_type == "GOD_STATE":
                 await self._handle_god_state(client, data)
             elif msg_type == "GOD_LIBRARY_EDIT":
@@ -470,10 +525,12 @@ class GodotWebSocketBridge(WorldAdapter):
         Applies direct God edit to World Library strictly in RAM.
         Zero mid-day SQLite writes.
         """
-        topic = data.get("topic", "")
-        volume_title = data.get("volume_title") or data.get("title", "Divine Canonical Volume")
-        author_id = data.get("author_id", "GOD")
-        text_content = data.get("text_content") or data.get("body") or data.get("summary", "")
+        norm = normalize_library_edit_payload(data)
+        topic = norm["topic"]
+        volume_title = norm["volume_title"]
+        author_id = norm["author_id"]
+        text_content = norm["text_content"]
+        explicit_entry_id = norm.get("entry_id")
 
         if not self.engine:
             await client.send(
@@ -482,6 +539,18 @@ class GodotWebSocketBridge(WorldAdapter):
                         "type": "GOD_LIBRARY_EDIT_RESPONSE",
                         "status": "FAILURE",
                         "reason": "Engine offline",
+                    }
+                )
+            )
+            return
+
+        if not topic:
+            await client.send(
+                json.dumps(
+                    {
+                        "type": "GOD_LIBRARY_EDIT_RESPONSE",
+                        "status": "FAILURE",
+                        "reason": "Missing or empty 'topic'",
                     }
                 )
             )
@@ -503,14 +572,23 @@ class GodotWebSocketBridge(WorldAdapter):
         verdict = self.engine.world_goddess.evaluate(proposal)
 
         if verdict.status == "SUCCESS":
+            entry_id = resolve_library_entry_id(
+                topic=topic,
+                volume_title=volume_title,
+                existing_entries=self.engine.governance_engine.library_entries,
+                explicit_entry_id=explicit_entry_id,
+            )
             entry = WorldLibraryEntry(
-                entry_id=f"lib_{topic}",
+                entry_id=entry_id,
                 topic=topic,
                 title=volume_title,
                 summary=text_content,
                 author_id=author_id,
                 author_proficiency=1.0,
                 created_tick=self.engine.current_tick,
+                subject=topic,
+                body=text_content,
+                author_type="DIVINE",
             )
             self.engine.governance_engine.write_library_direct_god(entry)
 
@@ -530,12 +608,11 @@ class GodotWebSocketBridge(WorldAdapter):
 
     async def _handle_god_codex_edit(self, client: Any, data: dict[str, Any]) -> None:
         """Direct God decree or live parameter override in RAM."""
-        decree_id = data.get("decree_id") or data.get("title", f"decree_{uuid.uuid4().hex[:8]}")
-        text_decree = data.get("text_decree") or data.get("text", "")
-        parameter_key = data.get("parameter_key")
-        parameter_val = data.get("parameter_val")
-        if parameter_val is None:
-            parameter_val = data.get("parameter_value")
+        norm = normalize_codex_edit_payload(data)
+        decree_id = norm["decree_id"]
+        text_decree = norm["text_decree"]
+        parameter_key = norm["parameter_key"]
+        parameter_val = norm["parameter_val"]
 
         if not self.engine:
             await client.send(
@@ -697,12 +774,13 @@ class GodotWebSocketBridge(WorldAdapter):
 
     async def _handle_god_command(self, client: Any, data: dict[str, Any]) -> None:
         """Executes miscellaneous divine interventions and runtime controls."""
-        raw_cmd = data.get("raw_command")
+        params = extract_god_command_params(data)
+        raw_cmd = data.get("raw_command") or params.get("raw_command")
         if raw_cmd:
             if not self.cli and self.engine:
-                from sim_core.god_console.cli import GodConsoleCLI
+                from sim_core.god_console.cli import RichGodConsole
 
-                self.cli = GodConsoleCLI(engine=self.engine)
+                self.cli = RichGodConsole(engine=self.engine)
             output_text = self.cli.execute_command(raw_cmd) if self.cli else "CLI engine offline"
             await client.send(
                 json.dumps(
@@ -716,7 +794,7 @@ class GodotWebSocketBridge(WorldAdapter):
             )
             return
 
-        cmd = data.get("command", "")
+        cmd = str(data.get("command") or params.get("command") or "").strip()
         details: dict[str, Any] = {}
 
         if not self.engine:
@@ -733,7 +811,10 @@ class GodotWebSocketBridge(WorldAdapter):
             return
 
         if cmd == "speed":
-            speed_val = float(data.get("speed", 1.0))
+            try:
+                speed_val = float(params.get("speed", 1.0))
+            except (ValueError, TypeError):
+                speed_val = 1.0
             self.engine.set_speed(speed_val)
             details["speed"] = self.engine.speed
         elif cmd == "pause":
@@ -743,9 +824,33 @@ class GodotWebSocketBridge(WorldAdapter):
             self.engine.is_running = True
             details["is_running"] = True
         elif cmd == "name_deity":
-            slot = data.get("slot", "")
-            name = data.get("name", "")
-            self.engine.divine_hierarchy.bestow_name(slot, name)
+            slot = str(params.get("slot", "")).strip()
+            name = str(params.get("name", "")).strip()
+            if not slot or slot not in self.engine.divine_hierarchy.entities:
+                await client.send(
+                    json.dumps(
+                        {
+                            "type": "GOD_COMMAND_RESPONSE",
+                            "command": cmd,
+                            "status": "FAILURE",
+                            "reason": f"Invalid or missing deity slot '{slot}'",
+                        }
+                    )
+                )
+                return
+            if not name:
+                await client.send(
+                    json.dumps(
+                        {
+                            "type": "GOD_COMMAND_RESPONSE",
+                            "command": cmd,
+                            "status": "FAILURE",
+                            "reason": "Missing 'name'",
+                        }
+                    )
+                )
+                return
+            self.engine.divine_hierarchy.bestow_name(slot, name)  # type: ignore[arg-type]
             prop = CommitProposal(
                 proposal_id=f"prop_{uuid.uuid4().hex[:8]}",
                 tick=self.engine.current_tick,
@@ -758,7 +863,19 @@ class GodotWebSocketBridge(WorldAdapter):
             details["slot"] = slot
             details["bestowed_name"] = name
         elif cmd == "decree":
-            msg = data.get("message", "")
+            msg = str(params.get("message", "")).strip()
+            if not msg:
+                await client.send(
+                    json.dumps(
+                        {
+                            "type": "GOD_COMMAND_RESPONSE",
+                            "command": cmd,
+                            "status": "FAILURE",
+                            "reason": "Missing 'message'",
+                        }
+                    )
+                )
+                return
             entry = self.engine.ledger_pipeline.record_deity_message(
                 entry_id=f"decree_{uuid.uuid4().hex[:8]}",
                 day=self.engine.current_day,
@@ -770,31 +887,116 @@ class GodotWebSocketBridge(WorldAdapter):
             )
             details["entry_id"] = entry.entry_id
         elif cmd == "save":
-            manifest = self.engine.commit_end_of_day()
+            manifest = self.engine.commit_end_of_day(advance_day=False)
             details["day"] = manifest.day
             details["status"] = manifest.status
         elif cmd == "step":
-            ticks = int(data.get("ticks", 1))
+            try:
+                ticks = max(1, int(params.get("ticks", 1)))
+            except (ValueError, TypeError):
+                ticks = 1
             for _ in range(ticks):
                 self.engine.step_tick()
             details["current_tick"] = self.engine.current_tick
-        elif cmd == "bless":
-            agent_id = data.get("agent_id")
-            if agent_id and agent_id in self.engine.agents:
-                ag = self.engine.agents[agent_id]
+        elif cmd in ("bless", "curse", "smite"):
+            raw_id = params.get("agent_id")
+            slot = params.get("slot")
+            target_id: str | None = None
+
+            if raw_id is not None:
+                raw_id_str = str(raw_id).strip()
+                if raw_id_str in self.engine.agents:
+                    target_id = raw_id_str
+                elif raw_id_str.isdigit() and int(raw_id_str) in self.slot_to_agent_id:
+                    target_id = self.slot_to_agent_id[int(raw_id_str)]
+                else:
+                    target_id = raw_id_str
+            elif slot is not None:
+                try:
+                    slot_int = int(slot)
+                    target_id = self.slot_to_agent_id.get(slot_int)
+                    if not target_id:
+                        await client.send(
+                            json.dumps(
+                                {
+                                    "type": "GOD_COMMAND_RESPONSE",
+                                    "command": cmd,
+                                    "status": "FAILURE",
+                                    "reason": f"Slot '{slot}' not found",
+                                }
+                            )
+                        )
+                        return
+                except (ValueError, TypeError):
+                    await client.send(
+                        json.dumps(
+                            {
+                                "type": "GOD_COMMAND_RESPONSE",
+                                "command": cmd,
+                                "status": "FAILURE",
+                                "reason": f"Invalid slot '{slot}'",
+                            }
+                        )
+                    )
+                    return
+
+            if not target_id:
+                await client.send(
+                    json.dumps(
+                        {
+                            "type": "GOD_COMMAND_RESPONSE",
+                            "command": cmd,
+                            "status": "FAILURE",
+                            "reason": "Missing 'agent_id' or 'slot'",
+                        }
+                    )
+                )
+                return
+
+            if target_id not in self.engine.agents:
+                await client.send(
+                    json.dumps(
+                        {
+                            "type": "GOD_COMMAND_RESPONSE",
+                            "command": cmd,
+                            "status": "FAILURE",
+                            "reason": f"Agent '{target_id}' not found",
+                        }
+                    )
+                )
+                return
+
+            ag = self.engine.agents[target_id]
+            if cmd == "bless":
                 ag.health = ag.max_health
                 ag.hunger = 100.0
+                ag.stamina = 100.0
                 ag.distress = 0.0
                 ag.crying = False
                 ag.injured = 0.0
                 ag.illness = 0.0
-                details["blessed_agent_id"] = agent_id
-        elif cmd == "smite":
-            agent_id = data.get("agent_id")
-            if agent_id and agent_id in self.engine.agents:
-                ag = self.engine.agents[agent_id]
-                ag.alive = False
-                self.despawn_agent(agent_id, ag.slot_idx, reason="SMITTEN")
+                details["blessed_agent_id"] = target_id
+            elif cmd == "curse":
+                ag.distress = 0.85
+                ag.hunger = 15.0
+                ag.stamina = 10.0
+                ag.crying = ag.stage in ("INFANT", "CHILD")
+                details["cursed_agent_id"] = target_id
+            elif cmd == "smite":
+                if not ag.alive:
+                    await client.send(
+                        json.dumps(
+                            {
+                                "type": "GOD_COMMAND_RESPONSE",
+                                "command": cmd,
+                                "status": "FAILURE",
+                                "reason": f"Agent '{target_id}' already deceased",
+                            }
+                        )
+                    )
+                    return
+
+                self.engine.despawn_agent(target_id, reason="SMITTEN")
                 fatality = FatalityRecord(
                     agent_id=ag.agent_id,
                     display_name=ag.display_name,
@@ -809,7 +1011,7 @@ class GodotWebSocketBridge(WorldAdapter):
                     death_tick=self.engine.current_tick,
                 )
                 self.engine.judiciary.record_fatality(fatality)
-                details["smitten_agent_id"] = agent_id
+                details["smitten_agent_id"] = target_id
         else:
             await client.send(
                 json.dumps(
@@ -833,6 +1035,43 @@ class GodotWebSocketBridge(WorldAdapter):
                 }
             )
         )
+
+    # =========================================================================
+    # Tracked Background Tasks (non-blocking dialogue dispatch)
+    # =========================================================================
+
+    def _spawn_background_task(self, coro: Any, client: Any = None) -> asyncio.Task[Any]:
+        """Schedules coro as a tracked task with done-callback error logging and cleanup."""
+        task = asyncio.ensure_future(coro)
+        self._background_tasks[task] = client
+        task.add_done_callback(self._on_background_task_done)
+        return task
+
+    def _on_background_task_done(self, task: asyncio.Task[Any]) -> None:
+        self._background_tasks.pop(task, None)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Bridge background task failed: %s", exc, exc_info=exc)
+            if self.engine:
+                self.engine.healer.handle(
+                    fault_class="WS_BRIDGE_DROP",
+                    day=self.engine.current_day,
+                    tick=self.engine.current_tick,
+                    context={"error": f"background_task: {exc}"},
+                )
+
+    async def flush_background_tasks(self) -> None:
+        """Awaits all in-flight background tasks (used by tests and clean shutdown)."""
+        while self._background_tasks:
+            await asyncio.gather(*list(self._background_tasks), return_exceptions=True)
+
+    def _cancel_background_tasks(self, client: Any = None) -> None:
+        """Cancels tracked tasks for one client (disconnect) or all tasks (client=None)."""
+        for task, owner in list(self._background_tasks.items()):
+            if client is None or owner is client:
+                task.cancel()
 
     async def _handle_dialogue_request(self, client: Any, data: dict[str, Any]) -> None:
         """Processes interactive dialogue request with Deity or Mortal asynchronously."""
@@ -876,16 +1115,38 @@ class GodotWebSocketBridge(WorldAdapter):
             message=message,
             order=order,
         )
-        resp = await asyncio.to_thread(self.engine.divine_llm_brain.generate_dialogue, req)
-        await client.send(
-            json.dumps(
-                {
-                    "type": "DIALOGUE_RESPONSE",
-                    "dialogue_id": dialogue_id,
-                    **resp.model_dump(),
-                }
+        try:
+            resp = await asyncio.to_thread(self.engine.divine_llm_brain.generate_dialogue, req)
+        except Exception as exc:
+            if self.engine:
+                self.engine.healer.handle(
+                    fault_class="WS_BRIDGE_DROP",
+                    day=self.engine.current_day,
+                    tick=self.engine.current_tick,
+                    context={"error": f"dialogue: {exc}"},
+                )
+            resp = DialogueResponse(
+                target_id=target_id,
+                target_name="Silent Voice",
+                title="The Ether",
+                race="DIVINE",
+                mood="calm",
+                spoken_reply="The divine link wavers, but your words were heard. Speak again.",
+                action_taken="",
             )
-        )
+        try:
+            await client.send(
+                json.dumps(
+                    {
+                        "type": "DIALOGUE_RESPONSE",
+                        "dialogue_id": dialogue_id,
+                        **resp.model_dump(),
+                    }
+                )
+            )
+        except Exception:
+            # Client disconnected while the reply was being generated
+            return
 
     # =========================================================================
     # Server Lifecycle & Connection Handling
@@ -897,10 +1158,7 @@ class GodotWebSocketBridge(WorldAdapter):
         msg = json.dumps(payload)
         for c in list(self.clients):
             if c != exclude:
-                try:
-                    asyncio.create_task(c.send(msg))
-                except Exception:
-                    pass
+                self._schedule_client_send(c, msg)
 
     def broadcast_building_sync(self, exclude: Any = None) -> None:
         """Broadcasts full BUILDING_SYNC to connected clients."""
@@ -908,10 +1166,7 @@ class GodotWebSocketBridge(WorldAdapter):
         msg = json.dumps(payload)
         for c in list(self.clients):
             if c != exclude:
-                try:
-                    asyncio.create_task(c.send(msg))
-                except Exception:
-                    pass
+                self._schedule_client_send(c, msg)
 
     def broadcast_building_update(self, building: dict[str, Any] | Any) -> None:
         """Broadcasts incremental BUILDING_UPDATE event to connected clients."""
@@ -946,6 +1201,7 @@ class GodotWebSocketBridge(WorldAdapter):
                     context={"error": str(exc)},
                 )
         finally:
+            self._cancel_background_tasks(websocket)
             self.clients.discard(websocket)
             if not self.clients and self.engine:
                 self.engine.god_presence.set_active(False)
@@ -961,6 +1217,13 @@ class GodotWebSocketBridge(WorldAdapter):
 
     async def stop_server_async(self) -> None:
         """Closes server and disconnects active clients cleanly."""
+        self._cancel_background_tasks()
+        for client in list(self.clients):
+            try:
+                await client.close()
+            except Exception:
+                pass
+        self.clients.clear()
         if self.server:
             self.server.close()
             await self.server.wait_closed()

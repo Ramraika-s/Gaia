@@ -94,6 +94,21 @@ CommitKind = Literal[
 ]
 
 
+AgentRole = Literal[
+    "CITIZEN",
+    "PALACE_KNIGHT",
+    "KNIGHT",
+    "CITY_GUARD",
+    "SCHOLAR",
+    "MERCHANT",
+    "FARMER",
+    "BLACKSMITH",
+    "BUILDER",
+    "HUNTER",
+    "CLERIC",
+]
+
+
 class Vec3(BaseModel):
     x: float = 0.0
     y: float = 0.0  # Synced against data/world_heightmap.npy
@@ -111,9 +126,7 @@ class AgentRecord(BaseModel):
     sub_lineage: BeasthumanSubLineage | None = None
     secondary_heritage_race: RaceId | None = None
     dragon_form: DragonForm | None = None
-    role: Literal[
-        "CITIZEN", "PALACE_KNIGHT", "SCHOLAR", "MERCHANT", "FARMER", "CLERIC", "CITY_GUARD"
-    ] = "CITIZEN"
+    role: AgentRole = "CITIZEN"
     title: str | None = None
     patron_godmother_slot: RacialGodMotherSlot | None = None
     godmother_affinities: dict[str, float] = Field(default_factory=dict)

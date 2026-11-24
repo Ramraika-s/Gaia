@@ -9,20 +9,21 @@ Follows ARCHITECTURE.md Sections 2, 7, 8 & AGENTS.md Section 3.
 
 from __future__ import annotations
 
-import json
+import math
 import signal
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import psutil
+import torch
 
+from sim_core.brains.action_bridge import CognitiveActionExecutor
 from sim_core.brains.consolidation import SleepCycleConsolidator
 from sim_core.brains.hierarchical_brain import HierarchicalBrain
 from sim_core.brains.memory_rag import MemoryRAGIndex
 from sim_core.brains.personality import MoodState, generate_personality_vector
-from sim_core.brains.profession_nets import PROFESSIONS
 from sim_core.bridge.base import WorldAdapter
 from sim_core.bridge.mock_adapter import MockWorldAdapter
 from sim_core.config import (
@@ -43,18 +44,21 @@ from sim_core.lifecycle import LifecycleManager
 from sim_core.neural.shared_net import SharedSkillNet
 from sim_core.persistence.checkpoints import WorldGoddessCheckpointManager
 from sim_core.persistence.db import init_db
+from sim_core.persistence.state_serializer import WorldStateSerializer
 from sim_core.persistence.world_goddess import WorldGoddessCritic
 from sim_core.resilience.healer import ErrorHealer
 from sim_core.schemas import (
     AgentRecord,
+    AgentRole,
     BeasthumanSubLineage,
     DailyManifest,
+    DeathCause,
+    FatalityRecord,
     Gender,
     RaceId,
     Season,
     Stage,
     Vec3,
-    WorldLibraryEntry,
 )
 from sim_core.society.borders import BorderManager
 from sim_core.society.economy import WorldBank
@@ -77,6 +81,20 @@ from sim_core.spatial.navigation import NavigationEngine
 from sim_core.world.city_layout import CityLayoutEngine
 from sim_core.world.palace_security import PalaceSecurityEngine
 from sim_core.world.regional_weather import RegionalWeatherEngine
+
+ROLE_TO_PROFESSION: dict[AgentRole, str] = {
+    "CITIZEN": "CITIZEN",
+    "PALACE_KNIGHT": "KNIGHT",
+    "KNIGHT": "KNIGHT",
+    "CITY_GUARD": "CITY_GUARD",
+    "SCHOLAR": "SCHOLAR",
+    "MERCHANT": "MERCHANT",
+    "FARMER": "FARMER",
+    "BLACKSMITH": "BLACKSMITH",
+    "BUILDER": "BUILDER",
+    "HUNTER": "HUNTER",
+    "CLERIC": "CLERIC",
+}
 
 
 class SimulationEngine:
@@ -105,6 +123,9 @@ class SimulationEngine:
         self.god_ledger_dir = Path(god_ledger_dir)
         self.headless = headless
 
+        # Every new simulation boots into a crisp sunlit golden morning (08:30 AM)
+        self.day_start_hour: float = 8.5
+
         # Initialize SQLite DB schema if needed
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         init_db(self.db_path)
@@ -124,6 +145,7 @@ class SimulationEngine:
         self.shared_skill_net = SharedSkillNet()
         self.memory_rag = MemoryRAGIndex()
         self.sleep_consolidator = SleepCycleConsolidator(healer=self.healer)
+        self.action_bridge = CognitiveActionExecutor(engine=self)
 
         # Divine hierarchy & governance
         self.divine_hierarchy = DivineHierarchyManager()
@@ -145,7 +167,7 @@ class SimulationEngine:
         self.border_mgr = BorderManager()
         self.political_engine = PoliticalEngine()
         self.religion_mgr = ReligionManager()
-        self.governance_engine = TwoBookGovernanceEngine()
+        self.governance_engine = TwoBookGovernanceEngine(defer_mortal_exports=True)
         self.judiciary = JudiciaryEngine()
         self.morality = MoralityEngine()
         self.traditions = TraditionManager()
@@ -153,6 +175,9 @@ class SimulationEngine:
 
         # Adapter for visualization / Godot IPC
         self.adapter: WorldAdapter = adapter if adapter is not None else MockWorldAdapter()
+
+        # Spatial awareness and road navigation (Sprint 5)
+        self.navigation = NavigationEngine(heightmap=self.heightmap)
 
         # Palace security and Twin Dragon gate
         self.palace_security = PalaceSecurityEngine(engine=self)
@@ -166,8 +191,7 @@ class SimulationEngine:
         # Modular Outfits, Accessories & Tools Economy (Sprint 6)
         self.gear_economy = GearEconomyEngine(engine=self)
 
-        # Spatial awareness, navigation, and speech acts (Sprint 5)
-        self.navigation = NavigationEngine(heightmap=self.heightmap)
+        # Speech acts and divine autonomy (Sprint 5)
         self.speech_acts = SpeechActEngine(engine=self)
         self.divine_autonomy = DivineAutonomyEngine(engine=self)
         self.divine_llm_brain = DivineLLMBrain(engine=self)
@@ -221,9 +245,7 @@ class SimulationEngine:
         settlement_id: str | None = None,
         religion_id: str | None = None,
         dynasty_surname: str | None = None,
-        role: Literal[
-            "CITIZEN", "PALACE_KNIGHT", "SCHOLAR", "MERCHANT", "FARMER", "CLERIC", "CITY_GUARD"
-        ] = "CITIZEN",
+        role: AgentRole = "CITIZEN",
         title: str | None = None,
         agent_id: str | None = None,
     ) -> AgentRecord:
@@ -249,7 +271,7 @@ class SimulationEngine:
 
         personality = generate_personality_vector(race)
         mood = MoodState(calm=0.8)
-        prof_role = role if role in PROFESSIONS else "CITIZEN"
+        prof_role = ROLE_TO_PROFESSION.get(role, "CITIZEN")
 
         agent = AgentRecord(
             agent_id=agent_id,
@@ -307,6 +329,37 @@ class SimulationEngine:
     # Main Tick & Cognitive LOD Scheduler
     # =========================================================================
 
+    def despawn_agent(self, agent_id: str, reason: str = "DEATH") -> bool:
+        """
+        Idempotently despawns an agent from active spatial grid, neural slot, and client adapter.
+        Does NOT remove the agent from self.agents so that probate, credit conservation,
+        and end-of-day SQLite persistence are preserved.
+        """
+        if agent_id not in self.agents:
+            return False
+        ag = self.agents[agent_id]
+        if not ag.alive or ag.slot_idx in self.batched_net.free_slots:
+            return False
+
+        ag.alive = False
+        self.adapter.despawn_agent(agent_id, ag.slot_idx, reason=reason)
+        self.spatial_grid.remove_agent(agent_id)
+        self.batched_net.free_slot(ag.slot_idx)
+        if hasattr(self, "navigation") and self.navigation:
+            self.navigation.clear_agent_cache(agent_id)
+
+        if reason != "DESPAWN_ONLY" and hasattr(self, "property_mgr") and self.property_mgr:
+            city_layout = getattr(self, "city_layout", None)
+            adapter = getattr(self, "adapter", None)
+            self.property_mgr.execute_probate_and_escheatment(
+                deceased=ag,
+                all_agents=self.agents,
+                bank=self.bank,
+                city_layout=city_layout,
+                adapter=adapter,
+            )
+        return True
+
     def step_tick(self) -> None:
         """
         Executes one discrete simulation tick:
@@ -352,16 +405,18 @@ class SimulationEngine:
                             "race": agent.race,
                             "gender": agent.gender,
                             "stage": agent.stage,
-                            "name": agent.display_name,
-                            "dynasty": agent.dynasty_surname,
+                            "role": agent.role or "CITIZEN",
+                            "profession": agent.profession or "CITIZEN",
+                            "name": agent.display_name or "Citizen",
+                            "dynasty": agent.dynasty_surname or "",
                             "x": agent.pos.x,
                             "y": agent.pos.y,
                             "z": agent.pos.z,
                             "rotation_y": getattr(agent, "yaw", 0.0),
                             "crying": agent.crying,
                             "is_oracle": agent.is_oracle,
-                            "dragon_form": agent.dragon_form,
-                            "speech_text": getattr(agent, "speech_text", ""),
+                            "dragon_form": agent.dragon_form or "HUMANOID_DRAGON",
+                            "speech_text": getattr(agent, "speech_text", "") or "",
                             "activity_state": getattr(agent, "activity_state", "IDLE"),
                             "equipped_gear": list(getattr(agent, "equipped_gear", [])),
                             "home_building_id": getattr(agent, "home_building_id", None),
@@ -390,7 +445,9 @@ class SimulationEngine:
         self.weather_engine.step(self.current_tick, self.current_season)
         if self.current_tick % 2 == 0:
             tick_in_day = self.current_tick % TICKS_PER_GAME_DAY
-            time_of_day = (tick_in_day / float(TICKS_PER_GAME_DAY)) * 24.0
+            time_of_day = (
+                (tick_in_day / float(TICKS_PER_GAME_DAY)) * 24.0 + self.day_start_hour
+            ) % 24.0
             season_prog = SeasonManager.get_season_progress(self.current_day, tick_in_day)
             weather_sample = self.weather_engine.sample_weather_at(
                 self.god_avatar_pos.x, self.god_avatar_pos.z
@@ -422,53 +479,300 @@ class SimulationEngine:
 
     def _step_scheduled_agents(self, agents: list[AgentRecord]) -> None:
         """Processes biological aging, distress, and batched neural execution."""
-        # Step biological lifecycle
-        for agent in agents:
-            LifecycleManager.advance_agent_tick(
-                agent=agent,
-                current_tick=self.current_tick,
-                season=self.current_season,
-                is_sheltered=True,
-            )
-            agent.hygiene = max(0.0, agent.hygiene - 0.0002)
-            agent.fatigue = min(1.0, agent.fatigue + 0.0003)
-            if agent.mood is not None:
-                agent.mood.step_decay(decay_rate=0.005)
+        weather_cache: dict[tuple[int, int], dict[str, Any]] = {}
 
-        # Vectorized 3-tier Hierarchical Cognitive Core forward pass
-        self.hierarchical_brain.forward_agents(agents)
-
-        # Utility Scheduler & Navigation Movement (Sprint 5)
-        weather_at_avatar = self.weather_engine.sample_weather_at(
-            self.god_avatar_pos.x, self.god_avatar_pos.z
-        )
-        weather_type = weather_at_avatar.get("primary_weather", "CLEAR")
-
-        for agent in agents:
-            is_infant_crying = False
-            nearby_ids = self.spatial_grid.get_nearby_ids(agent.pos.x, agent.pos.z, radius=12.0)
-            for nid in nearby_ids:
-                other = self.agents.get(nid)
-                if other and other.crying and other.stage == "INFANT":
-                    is_infant_crying = True
-                    break
-
-            activity, target_pos = self.navigation.evaluate_utility_schedule(
-                agent=agent,
-                tick=self.current_tick,
-                weather=weather_type,
-                is_infant_crying_nearby=is_infant_crying,
-            )
-            agent.activity_state = activity
-            if target_pos is not None:
-                agent.pos.x, agent.pos.z, agent.yaw = self.navigation.resolve_world_movement(
-                    current_x=agent.pos.x,
-                    current_z=agent.pos.z,
-                    target_x=target_pos.x,
-                    target_z=target_pos.z,
-                    speed=1.4,
-                    dt=0.5,
+        # 1. Biological Lifecycle (enforcing healer paused_subsystems)
+        if "agent_lifecycle" not in self.healer.paused_subsystems:
+            for agent in list(agents):
+                # Regional weather lookup per 128m coarse cell
+                cell_key = (
+                    int(math.floor(agent.pos.x / 128.0)),
+                    int(math.floor(agent.pos.z / 128.0)),
                 )
+                if cell_key not in weather_cache:
+                    weather_cache[cell_key] = self.weather_engine.sample_weather_at(
+                        agent.pos.x, agent.pos.z
+                    )
+
+                # Real is_sheltered check
+                is_sheltered = False
+                if agent.activity_state in (
+                    "SLEEPING",
+                    "SHELTERING",
+                    "MORNING_PREP",
+                    "GROOMING",
+                    "RESTING",
+                ):
+                    is_sheltered = True
+                elif (
+                    agent.home_building_id
+                    and hasattr(self, "city_layout")
+                    and agent.home_building_id in self.city_layout.buildings
+                ):
+                    hb = self.city_layout.buildings[agent.home_building_id]
+                    if math.hypot(agent.pos.x - hb.x, agent.pos.z - hb.z) <= 20.0:
+                        is_sheltered = True
+                if not is_sheltered and hasattr(self, "city_layout"):
+                    if math.hypot(agent.pos.x, agent.pos.z) <= 240.0:
+                        is_sheltered = True
+                    else:
+                        for c in self.city_layout.cities.values():
+                            if (
+                                math.hypot(agent.pos.x - c.center_x, agent.pos.z - c.center_z)
+                                <= 240.0
+                            ):
+                                is_sheltered = True
+                                break
+
+                # Nearest parent / caregiver distance for INFANT / CHILD
+                nearest_parent_dist = 20.0
+                if agent.stage in ("INFANT", "CHILD"):
+                    min_dist = 20.0
+                    for pid in agent.parent_ids:
+                        p = self.agents.get(pid)
+                        if p and p.alive:
+                            d = math.hypot(agent.pos.x - p.pos.x, agent.pos.z - p.pos.z)
+                            if d < min_dist:
+                                min_dist = d
+                    nearby_ids = self.spatial_grid.get_nearby_ids(
+                        agent.pos.x, agent.pos.z, radius=12.0
+                    )
+                    for nid in nearby_ids:
+                        if nid != agent.agent_id:
+                            other = self.agents.get(nid)
+                            if other and other.alive and other.stage in ("ADULT", "ELDER"):
+                                d = math.hypot(agent.pos.x - other.pos.x, agent.pos.z - other.pos.z)
+                                if d < min_dist:
+                                    min_dist = d
+                    nearest_parent_dist = min_dist
+
+                was_pregnant = agent.pregnant_ticks_remaining > 0
+
+                LifecycleManager.advance_agent_tick(
+                    agent=agent,
+                    current_tick=self.current_tick,
+                    season=self.current_season,
+                    is_sheltered=is_sheltered,
+                    nearest_parent_dist=nearest_parent_dist,
+                )
+
+                # Live pregnancy delivery
+                if was_pregnant and agent.pregnant_ticks_remaining == 0:
+                    if agent.alive:
+                        father = (
+                            self.agents.get(agent.pregnancy_father_id)
+                            if agent.pregnancy_father_id
+                            else None
+                        )
+                        survived, newborn, _reason = LifecycleManager.deliver_child(
+                            mother=agent, father=father, current_tick=self.current_tick
+                        )
+                        if survived and newborn is not None:
+                            # DEF-T2-05: Ground elevation to heightmap before spatial grid
+                            newborn.pos.y = self.heightmap.get_elevation(
+                                newborn.pos.x, newborn.pos.z
+                            )
+                            slot_idx = self.batched_net.allocate_slot(
+                                parent1_slot=agent.slot_idx,
+                                parent2_slot=father.slot_idx if father else None,
+                            )
+                            newborn.slot_idx = slot_idx
+                            newborn.credits = 0.0
+                            self.agents[newborn.agent_id] = newborn
+                            self.spatial_grid.update_agent(
+                                newborn.agent_id, newborn.pos.x, newborn.pos.z
+                            )
+                            self.adapter.spawn_agent(
+                                newborn.agent_id, newborn.slot_idx, newborn.model_dump()
+                            )
+                            self.judiciary.population_ledger[newborn.race] = (
+                                self.judiciary.population_ledger.get(newborn.race, 0) + 1
+                            )
+                            self.judiciary.population_ledger["total_alive"] = (
+                                self.judiciary.population_ledger.get("total_alive", 0) + 1
+                            )
+                        else:
+                            stillborn = FatalityRecord(
+                                agent_id=f"stillborn_{agent.agent_id}_{self.current_tick}",
+                                display_name=f"Stillborn child of {agent.display_name}",
+                                race=agent.race,
+                                sub_lineage=agent.sub_lineage,
+                                secondary_heritage_race=father.race if father else None,
+                                age_ticks=0,
+                                stage_at_death="INFANT",
+                                cause="BIRTH_COMPLICATION",
+                                season=self.current_season,
+                                death_day=self.current_day,
+                                death_tick=self.current_tick,
+                            )
+                            self.judiciary.record_fatality(stillborn)
+                    else:
+                        # DEF-T2-01: Mother died while pregnant; do NOT spawn post-mortem
+                        agent.pregnant_ticks_remaining = 0
+                        father = (
+                            self.agents.get(agent.pregnancy_father_id)
+                            if agent.pregnancy_father_id
+                            else None
+                        )
+                        f_name = f"Perinatal fatality of deceased mother {agent.display_name}"
+                        stillborn = FatalityRecord(
+                            agent_id=f"perinatal_{agent.agent_id}_{self.current_tick}",
+                            display_name=f_name,
+                            race=agent.race,
+                            sub_lineage=agent.sub_lineage,
+                            secondary_heritage_race=father.race if father else None,
+                            age_ticks=0,
+                            stage_at_death="INFANT",
+                            cause="BIRTH_COMPLICATION",
+                            season=self.current_season,
+                            death_day=self.current_day,
+                            death_tick=self.current_tick,
+                        )
+                        self.judiciary.record_fatality(stillborn)
+
+                if not agent.alive:
+                    self.despawn_agent(agent.agent_id, reason="NATURAL_DEATH")
+                    death_cause: DeathCause = "OLD_AGE"
+                    if agent.hunger <= 0.0:
+                        death_cause = "STARVATION"
+                    elif agent.illness > 0.1:
+                        death_cause = "ILLNESS"
+                    elif agent.stage == "ELDER":
+                        death_cause = "OLD_AGE"
+                    else:
+                        death_cause = "HAZARD"
+
+                    fatality = FatalityRecord(
+                        agent_id=agent.agent_id,
+                        display_name=agent.display_name,
+                        race=agent.race,
+                        sub_lineage=agent.sub_lineage,
+                        secondary_heritage_race=agent.secondary_heritage_race,
+                        age_ticks=agent.age_ticks,
+                        stage_at_death=agent.stage,
+                        cause=death_cause,
+                        season=self.current_season,
+                        death_day=self.current_day,
+                        death_tick=self.current_tick,
+                    )
+                    self.judiciary.record_fatality(fatality)
+                    continue
+
+                agent.hygiene = max(0.0, agent.hygiene - 0.0002)
+                agent.fatigue = min(1.0, agent.fatigue + 0.0003)
+                if agent.mood is not None:
+                    agent.mood.step_decay(decay_rate=0.005)
+
+        # Filter out deceased agents for cognitive and movement processing
+        agents = [a for a in agents if a.alive]
+
+        # 2. Vectorized 3-tier Hierarchical Cognitive Core forward pass & Action Bridge
+        if "neural_engine" not in self.healer.paused_subsystems and agents:
+            masked_logits, values = self.hierarchical_brain.forward_agents(agents)
+            self.action_bridge.execute_actions(agents, masked_logits, values)
+
+        # 3. Utility Scheduler & Navigation Movement (Sprint 5)
+        if "spatial_movement" not in self.healer.paused_subsystems:
+            for agent in agents:
+                # Skip utility-schedule override for guards while
+                # security/patrol engines control movement
+                if agent.role in ("PALACE_KNIGHT", "CITY_GUARD") or agent.profession in (
+                    "PALACE_KNIGHT",
+                    "CITY_GUARD",
+                ):
+                    continue
+
+                # Regional weather for this agent
+                cell_key = (
+                    int(math.floor(agent.pos.x / 128.0)),
+                    int(math.floor(agent.pos.z / 128.0)),
+                )
+                if cell_key not in weather_cache:
+                    weather_cache[cell_key] = self.weather_engine.sample_weather_at(
+                        agent.pos.x, agent.pos.z
+                    )
+                agent_weather = weather_cache[cell_key]
+                weather_type = agent_weather.get("primary_weather", "CLEAR")
+
+                is_infant_crying = False
+                nearby_ids = self.spatial_grid.get_nearby_ids(agent.pos.x, agent.pos.z, radius=12.0)
+                for nid in nearby_ids:
+                    other = self.agents.get(nid)
+                    if other and other.crying and other.stage == "INFANT":
+                        is_infant_crying = True
+                        break
+
+                # Resolve real home_pos and local work_pos
+                home_pos: Vec3 | None = None
+                work_pos: Vec3 | None = None
+                if (
+                    agent.home_building_id
+                    and hasattr(self, "city_layout")
+                    and agent.home_building_id in self.city_layout.buildings
+                ):
+                    hb = self.city_layout.buildings[agent.home_building_id]
+                    door_pos = self.navigation.get_building_door_pos(agent.home_building_id, hb)
+                    home_pos = door_pos if door_pos is not None else Vec3(x=hb.x, y=hb.y, z=hb.z)
+                elif (
+                    agent.settlement_id
+                    and hasattr(self, "city_layout")
+                    and agent.settlement_id in self.city_layout.cities
+                ):
+                    c = self.city_layout.cities[agent.settlement_id]
+                    ang_to_origin = math.atan2(-c.center_z, -c.center_x)
+                    door_x = c.center_x + 45.0 * math.cos(ang_to_origin)
+                    door_z = c.center_z + 45.0 * math.sin(ang_to_origin)
+                    home_pos = Vec3(x=round(door_x, 2), y=c.elevation_y, z=round(door_z, 2))
+                elif hasattr(self, "city_layout") and self.city_layout.cities:
+                    nearest_c = min(
+                        self.city_layout.cities.values(),
+                        key=lambda c: math.hypot(
+                            agent.pos.x - c.center_x, agent.pos.z - c.center_z
+                        ),
+                    )
+                    if (
+                        math.hypot(
+                            agent.pos.x - nearest_c.center_x, agent.pos.z - nearest_c.center_z
+                        )
+                        < 400.0
+                    ):
+                        ang_to_origin = math.atan2(-nearest_c.center_z, -nearest_c.center_x)
+                        door_x = nearest_c.center_x + 45.0 * math.cos(ang_to_origin)
+                        door_z = nearest_c.center_z + 45.0 * math.sin(ang_to_origin)
+                        home_pos = Vec3(
+                            x=round(door_x, 2), y=nearest_c.elevation_y, z=round(door_z, 2)
+                        )
+
+                if home_pos is not None and math.hypot(home_pos.x, home_pos.z) > 400.0:
+                    work_pos = Vec3(x=home_pos.x, y=home_pos.y, z=home_pos.z)
+                else:
+                    work_pos = Vec3(x=0.0, y=24.0, z=38.0)
+
+                activity, target_pos = self.navigation.evaluate_utility_schedule(
+                    agent=agent,
+                    tick=self.current_tick,
+                    weather=weather_type,
+                    is_infant_crying_nearby=is_infant_crying,
+                    home_pos=home_pos,
+                    work_pos=work_pos,
+                )
+                agent.activity_state = activity
+                if target_pos is not None:
+                    allow_palace = self.palace_security.is_whitelisted(
+                        agent
+                    ) or self.palace_security.has_active_pass(agent.agent_id, self.current_tick)
+                    next_wpt = self.navigation.get_next_waypoint(
+                        agent.agent_id, agent.pos, target_pos
+                    )
+                    agent.pos.x, agent.pos.z, agent.yaw = self.navigation.resolve_world_movement(
+                        current_x=agent.pos.x,
+                        current_z=agent.pos.z,
+                        target_x=next_wpt.x,
+                        target_z=next_wpt.z,
+                        speed=1.4,
+                        dt=0.5,
+                        allow_palace_interior=allow_palace,
+                    )
 
         # Crowd separation & God presence reaction (Sprint 5)
         self.navigation.apply_crowd_separation(agents, self.spatial_grid)
@@ -482,41 +786,66 @@ class SimulationEngine:
             elev = self.heightmap.get_elevation(agent.pos.x, agent.pos.z)
             agent.pos.y = elev
             self.spatial_grid.update_agent(agent.agent_id, agent.pos.x, agent.pos.z)
+
+            flags = 0
+            if agent.crying:
+                flags |= 1  # FLAG_CRYING
+            if agent.is_oracle:
+                flags |= 2  # FLAG_IS_ORACLE
+            if getattr(agent, "dragon_form", None) == "TRUE_DRAGON":
+                flags |= 4  # FLAG_TRUE_DRAGON
+            if agent.injured > 0.0:
+                flags |= 8  # FLAG_INJURED
+            if agent.illness > 0.0:
+                flags |= 16  # FLAG_ILLNESS
+            if getattr(agent, "in_combat", False) or getattr(agent, "activity_state", "") in (
+                "COMBAT",
+                "DEFEND",
+            ):
+                flags |= 32  # FLAG_IN_COMBAT
+            if getattr(agent, "is_praying", False) or (
+                getattr(agent, "activity_state", "") == "PRAY"
+            ):
+                flags |= 64  # FLAG_PRAYING
+
             self.adapter.update_agent_position(
                 slot_idx=agent.slot_idx,
                 x=agent.pos.x,
                 y=agent.pos.y,
                 z=agent.pos.z,
                 yaw=getattr(agent, "yaw", 0.0),
+                packed_flags=flags,
             )
 
     def _step_civic_loop(self) -> None:
         """Executes WTC clearing, loan checks, and psutil host RAM monitoring."""
-        # WTC market clearing & Fisher CPI update
-        total_m = self.bank.calculate_total_circulation(list(self.agents.values()))
-        self.wtc.update_macro_aggregates(
-            money_supply_m=total_m,
-            real_output_q=max(10.0, float(len(self.agents) * 5.0)),
-        )
-        self.wtc.clear_market(current_day=self.current_day, current_tick=self.current_tick)
-
-        # Autonomous Housing Market, Tier Upgrades & Ring 2 Frontier Pioneers
-        self.housing_market.step_housing_market(self.agents, self.bank, self.current_tick)
-        self.housing_market.step_frontier_pioneers(self.agents, self.bank, self.current_tick)
-
-        # Modular Outfits, Accessories & Tools Economy
-        self.gear_economy.step_gear_economy(self.agents, self.bank, self.current_tick)
-
-        # Process any bank default cases into judiciary
-        for case_info in self.bank.defaulted_cases:
-            self.judiciary.file_case(
-                accused_id=case_info["accused_id"],
-                offense_type="DEBT_DEFAULT",
-                opened_tick=self.current_tick,
-                settlement_id=None,
-                evidence_score=1.0,
+        if "world_bank_wtc" not in self.healer.paused_subsystems:
+            # WTC market clearing & Fisher CPI update
+            total_m = self.bank.calculate_total_circulation(list(self.agents.values()))
+            living_count = sum(1 for a in self.agents.values() if a.alive)
+            self.wtc.update_macro_aggregates(
+                money_supply_m=total_m,
+                real_output_q=WTCExchange.estimate_real_output_q(living_count),
             )
-        self.bank.defaulted_cases.clear()
+            self.wtc.clear_market(current_day=self.current_day, current_tick=self.current_tick)
+
+            # Autonomous Housing Market, Tier Upgrades & Ring 2 Frontier Pioneers
+            self.housing_market.step_housing_market(self.agents, self.bank, self.current_tick)
+            self.housing_market.step_frontier_pioneers(self.agents, self.bank, self.current_tick)
+
+            # Modular Outfits, Accessories & Tools Economy
+            self.gear_economy.step_gear_economy(self.agents, self.bank, self.current_tick)
+
+            # Process any bank default cases into judiciary
+            for case_info in self.bank.defaulted_cases:
+                self.judiciary.file_case(
+                    accused_id=case_info["accused_id"],
+                    offense_type="DEBT_DEFAULT",
+                    opened_tick=self.current_tick,
+                    settlement_id=None,
+                    evidence_score=1.0,
+                )
+            self.bank.defaulted_cases.clear()
 
         # psutil Host RAM Watermark Check (75% threshold)
         try:
@@ -525,14 +854,14 @@ class SimulationEngine:
                 if not self.ram_watermark_alert_emitted:
                     self.ram_watermark_alert_emitted = True
                     self.god_presence.set_active(True, self.current_tick)
-        except Exception:
+        except (OSError, RuntimeError):
             pass
 
     # =========================================================================
     # Pure End-of-Day World Goddess Atomic Commit
     # =========================================================================
 
-    def commit_end_of_day(self) -> DailyManifest:
+    def commit_end_of_day(self, advance_day: bool = True) -> DailyManifest:
         """
         Executes the all-or-nothing atomic end-of-day 2PC:
         1. Compiles God Ledger Markdown from buffered RAM logs.
@@ -540,19 +869,47 @@ class SimulationEngine:
         3. Invokes WorldGoddessCheckpointManager to write .db, .pt, and manifest.json.
         4. Strictly zero mid-day disk writes.
         """
-        self.current_day += 1
-        self.ram_watermark_alert_emitted = False
+        snapshot_day = self.current_day
 
-        # Advance calendar season every 7 game days
-        self.current_season = SeasonManager.get_season(self.current_day)
+        if advance_day:
+            self.current_day += 1
+            self.ram_watermark_alert_emitted = False
+            self.healer.reset_day(self.current_day)
 
-        # Advance governance proposals and religious inactivity decay
-        for pid in list(self.governance_engine.library_proposals.keys()):
-            self.governance_engine.advance_proposal_lifecycle(pid, self.current_tick)
-        for agent in self.agents.values():
-            self.religion_mgr.apply_inactivity_decay(agent, self.current_tick)
+            # Advance calendar season every 7 game days
+            self.current_season = SeasonManager.get_season(self.current_day)
 
-        # Compile daily markdown ledger
+            # Advance governance proposals and religious inactivity decay
+            for pid in list(self.governance_engine.library_proposals.keys()):
+                self.governance_engine.advance_proposal_lifecycle(pid, self.current_tick)
+            for agent in self.agents.values():
+                self.religion_mgr.apply_inactivity_decay(agent, self.current_tick)
+
+            # Flush pending mortal-authored book exports atomically at end-of-day
+            self.governance_engine.flush_mortal_exports()
+
+            # Pillar 4: Sleep-Cycle Consolidation (Mortal distillation, book-to-habit, deity drift)
+            self.sleep_consolidator.consolidate_mortal_professions(
+                agents=self.agents,
+                profession_registry=self.hierarchical_brain.tier2_profession,
+                rollout_buffer=self.action_bridge.rollout_buffer,
+            )
+            daily_events: list[dict[str, Any]] = [
+                {"event_type": "WAR"}
+                for _ in range(
+                    sum(len(p.at_war_with) for p in self.political_engine.polities.values()) // 2
+                )
+            ]
+            if self.wtc.cpi > 1.5:
+                daily_events.append({"event_type": "FAMINE", "severity": self.wtc.cpi - 1.0})
+            self.sleep_consolidator.compress_deity_memories_and_drift(
+                deities=self.divine_hierarchy.entities,
+                daily_world_events=daily_events,
+                memory_rag=self.memory_rag,
+                day=snapshot_day,
+            )
+
+        # Compile daily markdown ledger for snapshot_day
         demographics = {
             "HUMAN": sum(1 for a in self.agents.values() if a.alive and a.race == "HUMAN"),
             "ELF": sum(1 for a in self.agents.values() if a.alive and a.race == "ELF"),
@@ -564,7 +921,7 @@ class SimulationEngine:
         }
         goddess_name = self.divine_hierarchy.entities["world_goddess"].bestowed_name
         ledger_md = self.ledger_pipeline.compile_daily_ledger_markdown(
-            day=self.current_day - 1,
+            day=snapshot_day,
             season=self.current_season,
             world_goddess_name=goddess_name,
             living_population=sum(demographics.values()),
@@ -577,29 +934,9 @@ class SimulationEngine:
             ),
         )
 
-        # Pillar 4: Sleep-Cycle Consolidation (Mortal distillation, book-to-habit, deity drift)
-        self.sleep_consolidator.consolidate_mortal_professions(
-            agents=self.agents,
-            profession_registry=self.hierarchical_brain.tier2_profession,
-        )
-        daily_events: list[dict[str, Any]] = [
-            {"event_type": "WAR"}
-            for _ in range(
-                sum(len(p.at_war_with) for p in self.political_engine.polities.values()) // 2
-            )
-        ]
-        if self.wtc.cpi > 1.5:
-            daily_events.append({"event_type": "FAMINE", "severity": self.wtc.cpi - 1.0})
-        self.sleep_consolidator.compress_deity_memories_and_drift(
-            deities=self.divine_hierarchy.entities,
-            daily_world_events=daily_events,
-            memory_rag=self.memory_rag,
-            day=self.current_day - 1,
-        )
-
         # PyTorch model state payload
         pt_state = {
-            "batched_net": self.batched_net.state_dict(),
+            "batched_net": self.batched_net.get_state_dict(),
             "shared_net": self.shared_skill_net.state_dict(),
             "hierarchical_brain": self.hierarchical_brain.state_dict(),
             "current_day": self.current_day,
@@ -610,182 +947,13 @@ class SimulationEngine:
             "reserve_credits": self.bank.reserve_credits,
         }
 
-        # Prepare daily SQLite persistence deltas for agents, fatalities, library, and codex
-        sql_deltas: list[tuple[str, tuple[Any, ...]]] = []
-        for agent in self.agents.values():
-            sql_deltas.append(
-                (
-                    "INSERT OR REPLACE INTO agents ("
-                    "agent_id, slot_idx, display_name, dynasty_surname, epithet, gender, race, "
-                    "sub_lineage, secondary_heritage_race, dragon_form, patron_godmother_slot, "
-                    "godmother_affinities_json, is_oracle, skin_hsv_json, settlement_id, "
-                    "nation_id, religion_id, cleric_rank, stage, age_ticks, health, max_health, "
-                    "hunger, stamina, injured, illness, distress, crying, credits, credit_score, "
-                    "breeding_cooldown, pregnant_ticks_remaining, pregnancy_father_id, "
-                    "is_cross_species_pregnancy, last_prayer_tick, parent_ids_json, spouse_id, "
-                    "alive, quarantined, pos_json, traits_json, skills_json, tradition_ids_json, "
-                    "updated_tick"
-                    ") VALUES ("
-                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
-                    ")",
-                    (
-                        agent.agent_id,
-                        agent.slot_idx,
-                        agent.display_name,
-                        agent.dynasty_surname,
-                        agent.epithet,
-                        agent.gender,
-                        agent.race,
-                        agent.sub_lineage,
-                        agent.secondary_heritage_race,
-                        agent.dragon_form,
-                        agent.patron_godmother_slot,
-                        json.dumps(agent.godmother_affinities),
-                        1 if agent.is_oracle else 0,
-                        json.dumps(agent.skin_hsv),
-                        agent.settlement_id,
-                        agent.nation_id,
-                        agent.religion_id,
-                        agent.cleric_rank,
-                        agent.stage,
-                        agent.age_ticks,
-                        agent.health,
-                        agent.max_health,
-                        agent.hunger,
-                        agent.stamina,
-                        agent.injured,
-                        agent.illness,
-                        agent.distress,
-                        1 if agent.crying else 0,
-                        agent.credits,
-                        agent.credit_score,
-                        agent.breeding_cooldown,
-                        agent.pregnant_ticks_remaining,
-                        agent.pregnancy_father_id,
-                        1 if agent.is_cross_species_pregnancy else 0,
-                        agent.last_prayer_tick,
-                        json.dumps(agent.parent_ids),
-                        agent.spouse_id,
-                        1 if agent.alive else 0,
-                        1 if agent.quarantined else 0,
-                        agent.pos.model_dump_json(),
-                        json.dumps(agent.traits),
-                        json.dumps(agent.skills),
-                        json.dumps(agent.tradition_ids),
-                        self.current_tick,
-                    ),
-                )
-            )
+        # Prepare daily SQLite persistence deltas via dedicated serializer
+        sql_deltas = WorldStateSerializer.build_daily_sql_deltas(self)
 
-        for f in self.judiciary.fatality_index:
-            sql_deltas.append(
-                (
-                    "INSERT OR REPLACE INTO fatalities ("
-                    "agent_id, display_name, race, age_ticks, stage_at_death, cause, season, "
-                    "death_day, death_tick"
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        f.agent_id,
-                        f.display_name,
-                        f.race,
-                        f.age_ticks,
-                        f.stage_at_death,
-                        f.cause,
-                        f.season,
-                        f.death_day,
-                        f.death_tick,
-                    ),
-                )
-            )
-
-        for book in self.governance_engine.library_entries.values():
-            tags_json = json.dumps(book.tags) if book.tags else "[]"
-            effects_json = json.dumps(book.mechanical_effects) if book.mechanical_effects else "{}"
-            if isinstance(book, WorldLibraryEntry):
-                sql_deltas.append(
-                    (
-                        "INSERT OR REPLACE INTO world_library ("
-                        "entry_id, topic, title, summary, author_id, "
-                        "author_proficiency, skill_bonus, is_scripture, read_count, "
-                        "created_tick, subject, section, fact_key, tags_json, "
-                        "mechanical_effects_json, author_type"
-                        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            book.entry_id,
-                            book.topic,
-                            book.title,
-                            book.summary,
-                            book.author_id,
-                            book.author_proficiency,
-                            book.skill_bonus,
-                            1 if book.is_scripture else 0,
-                            book.read_count,
-                            book.created_tick,
-                            book.subject,
-                            book.section,
-                            book.fact_key,
-                            tags_json,
-                            effects_json,
-                            book.author_type,
-                        ),
-                    )
-                )
-            else:
-                sql_deltas.append(
-                    (
-                        "INSERT OR REPLACE INTO world_library ("
-                        "entry_id, topic, title, summary, author_id, "
-                        "author_proficiency, skill_bonus, is_scripture, read_count, "
-                        "created_tick, subject, section, fact_key, tags_json, "
-                        "mechanical_effects_json, author_type"
-                        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            book.entry_id,
-                            book.subject,
-                            book.title,
-                            book.summary,
-                            book.author,
-                            1.0,
-                            0.0,
-                            0,
-                            0,
-                            0,
-                            book.subject,
-                            book.target_section,
-                            book.fact_key,
-                            tags_json,
-                            effects_json,
-                            book.author_type,
-                        ),
-                    )
-                )
-
-        for decree in self.governance_engine.codex_entries.values():
-            sql_deltas.append(
-                (
-                    "INSERT OR REPLACE INTO divine_codex ("
-                    "entry_id, title, text, category, parameter_key, parameter_value_json, "
-                    "author_slot, supporting_daughter_slots_json, approved_by_god, created_tick"
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        decree.entry_id,
-                        decree.title,
-                        decree.text,
-                        decree.category,
-                        decree.parameter_key,
-                        decree.parameter_value_json,
-                        decree.author_slot,
-                        json.dumps(decree.supporting_daughter_slots),
-                        1 if decree.approved_by_god else 0,
-                        decree.created_tick,
-                    ),
-                )
-            )
 
         # Commit all daily deltas atomically via World Goddess 2PC
         manifest = self.checkpoint_mgr.commit_daily_checkpoint(
-            day=self.current_day - 1,
+            day=snapshot_day,
             tick=self.current_tick,
             season=self.current_season,
             world_goddess_name=goddess_name,
@@ -794,7 +962,39 @@ class SimulationEngine:
             ledger_markdown=ledger_md,
             sql_deltas=sql_deltas,
         )
+
+        if advance_day:
+            self.ledger_pipeline.clear_buffer()
+
         return manifest
+
+    def has_verified_checkpoint(self) -> bool:
+        """Checks whether any verified checkpoint exists on disk."""
+        return (
+            self.checkpoint_mgr.manifest_path.exists()
+            or self.checkpoint_mgr.history_path.exists()
+        )
+
+    def restore_from_checkpoint(
+        self, target_day: int | None = None
+    ) -> tuple[int, DailyManifest, str]:
+        """
+        Restores entire live simulation RAM state from verified SQLite database
+        and PyTorch tensor checkpoint.
+        Supports automatic rewind or target day historical rewind.
+        """
+        day, manifest, alert_msg = self.checkpoint_mgr.restore_or_rewind_on_boot(
+            live_db_path=self.db_path,
+            target_day=target_day,
+        )
+
+        pt_path = Path(manifest.pt_path)
+        pt_state = None
+        if pt_path.exists():
+            pt_state = torch.load(pt_path, map_location="cpu", weights_only=False)
+
+        WorldStateSerializer.restore_engine_state(self, self.db_path, pt_state)
+        return day, manifest, alert_msg
 
     def run(self, max_ticks: int | None = None) -> None:
         """Runs the simulation loop for max_ticks or until interrupted."""

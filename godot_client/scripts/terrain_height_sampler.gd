@@ -9,6 +9,7 @@ class_name TerrainHeightSampler
 
 const HEIGHTMAP_PNG_PATH: String = "res://assets/terrain/world_heightmap.png"
 const HEIGHTMAP_BIN_PATH: String = "res://assets/terrain/world_heightmap.bin"
+const ROAD_MASK_PNG_PATH: String = "res://assets/terrain/world_road_mask.png"
 const METADATA_PATH: String = "res://assets/terrain/terrain_metadata.json"
 
 static var _is_initialized: bool = false
@@ -25,6 +26,7 @@ static var _scale_z: float = 1023.0 / 8000.0
 
 static var _float_data: PackedFloat32Array = PackedFloat32Array()
 static var _image_data: Image = null
+static var _road_mask_image: Image = null
 static var _metadata: Dictionary = {}
 
 
@@ -78,6 +80,14 @@ static func ensure_loaded() -> void:
 			_rows = _image_data.get_height()
 			_scale_x = float(_cols - 1) / size_x if size_x > 0.0 else 1.0
 			_scale_z = float(_rows - 1) / size_z if size_z > 0.0 else 1.0
+
+	# 4. Load Road Mask
+	if ResourceLoader.exists(ROAD_MASK_PNG_PATH):
+		var tex: Resource = load(ROAD_MASK_PNG_PATH)
+		if tex is Texture2D:
+			_road_mask_image = (tex as Texture2D).get_image()
+	if _road_mask_image == null and FileAccess.file_exists(ROAD_MASK_PNG_PATH):
+		_road_mask_image = Image.load_from_file(ROAD_MASK_PNG_PATH)
 
 	_is_initialized = true
 	print("[TerrainHeightSampler] Initialized: bounds=[%s..%s, %s..%s], res=%dx%d, max_h=%.1fm, float_cache=%d" % [
@@ -163,9 +173,43 @@ static func create_collision_shape() -> HeightMapShape3D:
 	return shape
 
 
+static func get_road_weight(x: float, z: float) -> float:
+	ensure_loaded()
+	if _road_mask_image == null:
+		return 0.0
+
+	var clamped_x: float = clampf(x, _min_x, _max_x)
+	var clamped_z: float = clampf(z, _min_z, _max_z)
+
+	var w: int = _road_mask_image.get_width()
+	var h: int = _road_mask_image.get_height()
+	if w <= 0 or h <= 0:
+		return 0.0
+
+	var col: float = (clamped_x - _min_x) / (_max_x - _min_x) * float(w - 1)
+	var row: float = (clamped_z - _min_z) / (_max_z - _min_z) * float(h - 1)
+
+	var c0: int = clampi(int(floor(col)), 0, w - 1)
+	var r0: int = clampi(int(floor(row)), 0, h - 1)
+	var c1: int = mini(c0 + 1, w - 1)
+	var r1: int = mini(r0 + 1, h - 1)
+
+	var frac_c: float = col - float(c0)
+	var frac_r: float = row - float(r0)
+
+	var v00: float = _road_mask_image.get_pixel(c0, r0).r
+	var v10: float = _road_mask_image.get_pixel(c1, r0).r
+	var v01: float = _road_mask_image.get_pixel(c0, r1).r
+	var v11: float = _road_mask_image.get_pixel(c1, r1).r
+
+	var v_top: float = v00 * (1.0 - frac_c) + v10 * frac_c
+	var v_bot: float = v01 * (1.0 - frac_c) + v11 * frac_c
+	return v_top * (1.0 - frac_r) + v_bot * frac_r
+
+
 static func get_landmark_pad(key: String) -> Dictionary:
 	ensure_loaded()
-	var pads: Dictionary = _metadata.get("landmark_pads", {})
+	var pads: Dictionary = _metadata.get("ring_0_acropolis", {}).get("pads", {})
 	return pads.get(key, {})
 
 

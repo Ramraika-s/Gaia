@@ -212,7 +212,7 @@ def run_soak_test(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Gaia 1,500-Agent 4-Race Soak Test")
+    parser = argparse.ArgumentParser(description="Gaia 1,500-Agent 5-Race Soak Test")
     parser.add_argument("--ticks", type=int, default=600, help="Number of ticks to simulate")
     parser.add_argument("--agents", type=int, default=1500, help="Number of agents to spawn")
     parser.add_argument(

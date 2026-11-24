@@ -21,7 +21,7 @@ content_margin_right = 16.0
 content_margin_bottom = 12.0
 
 [node name="TwoBookModal" type="CanvasLayer"]
-layer = 20
+layer = 25
 script = ExtResource("1_modal")
 
 [node name="Center" type="CenterContainer" parent="."]

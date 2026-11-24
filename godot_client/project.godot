@@ -42,6 +42,10 @@ season_progress={
 "type": "float",
 "value": 0.0
 }
+night_factor={
+"type": "float",
+"value": 0.0
+}
 
 [input]
 

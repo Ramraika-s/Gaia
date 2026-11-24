@@ -103,3 +103,7 @@ class MockWorldAdapter(WorldAdapter):
         self.building_updates.clear()
         self.binary_frames_count = 0
         self.last_binary_frame_bytes = b""
+
+    def reset(self) -> None:
+        """Resets adapter state before full world reload/rewind."""
+        self.clear()

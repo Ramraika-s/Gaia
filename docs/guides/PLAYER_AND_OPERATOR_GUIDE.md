@@ -30,6 +30,7 @@ uv run python scripts/launch_gaia.py --agents 1500 --headless --speed 10.0
 | `--host` | `str` | `127.0.0.1` | WebSocket server bind address. |
 | `--port` | `int` | `8765` | WebSocket server bind port. |
 | `--headless` | `bool` | `False` | Run Python simulation core headlessly without starting Godot. |
+| `--fresh` | `bool` | `False` | Wipes existing `/tmp` or persistent DB checkpoints for a clean Day 0 boot. |
 | `--no-llm` | `bool` | `False` | Disable connection to local `llama.cpp` server (uses deterministic offline fallback). |
 | `--llm-url` | `str` | `http://127.0.0.1:8080` | Local `llama.cpp` HTTP server completion endpoint. |
 
@@ -49,6 +50,8 @@ When running the Godot 3D client, you control the **God Avatar** (`CharacterBody
 | **`F`** | Avatar | **Toggle Divine Flight:** Toggle gravity physics on/off to fly freely across mountain peaks. |
 | **`Alt`** | Avatar | **Release Mouse Capture:** Free cursor to click UI buttons and HUD elements. |
 | **`Left-Click`** | Any | Recapture mouse in viewport / Select mortal or building in RTS mode. |
+| **`Left-Click` (Target)** | Avatar / RTS | **Entity Inspector:** Open inspection modal for target mortal, deity, or building. |
+| **`Esc`** | Any | **Close Modal:** Dismiss current open UI modal cleanly via `UiStateManager`. |
 | **`Right-Click`** (Hold) | RTS | Orbit camera around current focal point. |
 | **`Mouse Wheel`** | Avatar / RTS | Zoom camera distance ($2\text{m}$ shoulder zoom $\leftrightarrow$ $4,000\text{m}$ planetary orbital map). |
 | **`E`** | Avatar | **Interact / Dialogue:** Open dialogue with a nearby Deity/Mortal or inspect a Library Lectern. |
@@ -120,6 +123,16 @@ When a mortal approaches the Ring 0 Grand Divine Palace Gate:
    - **Deny Entry:** Emits `DENY`; knights turn the petitioner away.
    - **Armed Escort:** Emits `ESCORT`; knights flank the petitioner and lead them to the palace dais.
 
+### 4.3 Entity Inspector & Divine Actions
+Clicking on any mortal, deity, or building in either 3rd-person or Orbital RTS mode opens the **`EntityInspector`** modal:
+1. **Demographics & Vitals:** View age, stage, gender, dynasty, health, hunger, stamina, hygiene, and fatigue bars.
+2. **Personality & Mood:** View the live 10-D personality radar and current dynamic `MoodState` (`calm`, `angry`, `grieving`, `fearful`, `inspired`).
+3. **Inventory & Gear:** Displays equipped outfits, accessories, vocational tools, and held commodity stacks.
+4. **Divine Actions:**
+   - **Bless:** Emits `curse/bless` command restoring health, removing illness/fatigue, and lifting distress.
+   - **Curse:** Inflicts divine affliction or exhaustion.
+5. **Dismissal:** Press **`Esc`** or click the close button. `UiStateManager` ensures mouse capture is restored cleanly.
+
 ---
 
 ## 5. Knowledge Foundry & Celestial Ingestion Workflow
@@ -139,8 +152,11 @@ uv run python scripts/celestial_ingest.py \
 
 ### Step 2: Review & Deduplicate (`scripts/knowledge_review.py`)
 ```bash
-# Evaluates against Stage 0 (Schema), Stage 1 (Hash/Key), Stage 2 (Lexical), Stage 3 (Semantic)
+# Evaluates all staged packs against Stage 0 (Schema), Stage 1 (Hash/Key), Stage 2 (Lexical), Stage 3 (Semantic)
 uv run python scripts/knowledge_review.py
+
+# Or target an individual pack and compare against an archived directory
+uv run python scripts/knowledge_review.py --pack staged_packs/blacksmithing_annals.json --archive-dir knowledge_foundry/archived_packs
 ```
 
 ### Step 3: Dry-Run Verification (`scripts/knowledge_merge.py`)
@@ -152,5 +168,5 @@ uv run python scripts/knowledge_merge.py --dry-run
 ### Step 4: Atomic Merge Commit (`scripts/knowledge_merge.py`)
 ```bash
 # Inserts validated books into world_library and archives staged JSON
-uv run python scripts/knowledge_merge.py --commit
+uv run python scripts/knowledge_merge.py --commit --archive-dir knowledge_foundry/archived_packs
 ```

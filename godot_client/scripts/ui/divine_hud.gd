@@ -26,6 +26,7 @@ signal toggle_console_requested
 @onready var council_drawer: PanelContainer = $CouncilDrawer
 @onready var message_container: VBoxContainer = $CouncilDrawer/VBox/Scroll/MessageContainer
 @onready var btn_toggle_feed: Button = $TopBar/HBox/BtnToggleFeed
+@onready var btn_commune: Button = $TopBar/HBox/BtnCommune
 
 var _current_speed: float = 1.0
 var _is_paused: bool = false
@@ -33,20 +34,65 @@ var _speed_buttons: Array[Button] = []
 
 
 func _ready() -> void:
+	var speed_group: ButtonGroup = ButtonGroup.new()
+	speed_group.allow_unpress = false
+	btn_pause.button_group = speed_group
+	btn_1x.button_group = speed_group
+	btn_5x.button_group = speed_group
+	btn_20x.button_group = speed_group
+	btn_60x.button_group = speed_group
 	_speed_buttons = [btn_pause, btn_1x, btn_5x, btn_20x, btn_60x]
+	council_drawer.visible = false
+	btn_toggle_feed.text = "Council Feed ▼"
 	_connect_ui_signals()
 	_connect_bridge_signals()
 	_update_speed_button_states()
 
 
 func _connect_ui_signals() -> void:
-	btn_pause.pressed.connect(func(): _set_speed(0.0))
+	btn_pause.pressed.connect(_on_pause_pressed)
 	btn_1x.pressed.connect(func(): _set_speed(1.0))
 	btn_5x.pressed.connect(func(): _set_speed(5.0))
 	btn_20x.pressed.connect(func(): _set_speed(20.0))
 	btn_60x.pressed.connect(func(): _set_speed(60.0))
 
 	btn_toggle_feed.pressed.connect(_on_toggle_feed_pressed)
+	btn_commune.pressed.connect(_on_commune_pressed)
+
+
+func _find_dialogue_modal() -> Node:
+	var parent: Node = get_parent()
+	if parent:
+		var sibling: Node = parent.get_node_or_null("DialogueModal")
+		if sibling:
+			return sibling
+	return get_tree().root.find_child("DialogueModal", true, false)
+
+
+func _on_commune_pressed() -> void:
+	"""One-click link to the World Goddess from anywhere on the 8km map."""
+	var modal: Node = _find_dialogue_modal()
+	if modal == null or not modal.has_method("open_dialogue"):
+		return
+	var info: Dictionary = {}
+	var npc_mgr: Node = get_tree().root.find_child("DivineNpcsManager", true, false)
+	if npc_mgr and npc_mgr.has_method("get_deity_info"):
+		info = npc_mgr.get_deity_info("world_goddess")
+	modal.open_dialogue(
+		"DEITY",
+		"world_goddess",
+		str(info.get("name", "World Goddess")),
+		str(info.get("title", "Cosmic Matriarch & Global Adjudicator")),
+		"DIVINE",
+		"calm"
+	)
+
+
+func _on_pause_pressed() -> void:
+	if _is_paused:
+		_set_speed(_current_speed if _current_speed > 0.0 else 1.0)
+	else:
+		_set_speed(0.0)
 
 
 func _connect_bridge_signals() -> void:
@@ -103,12 +149,15 @@ func _update_speed_button_states() -> void:
 
 func _on_time_weather_received(data: Dictionary) -> void:
 	var day: int = int(data.get("day", 1))
-	var tod: float = float(data.get("time_of_day", 0.5))
+	var tod: float = float(data.get("time_of_day", 12.0))
 	var season_progress: float = float(data.get("season_progress", 0.0))
 	var season_str: String = _get_season_name(season_progress)
 
-	var hours: int = int(tod * 24.0) % 24
-	var mins: int = int((tod * 24.0 - hours) * 60.0)
+	var tod_norm: float = fmod(tod, 24.0)
+	if tod_norm < 0.0:
+		tod_norm += 24.0
+	var hours: int = int(tod_norm)
+	var mins: int = int(fmod(tod_norm, 1.0) * 60.0)
 	var time_str: String = "%02d:%02d" % [hours, mins]
 
 	if day_label:
@@ -116,12 +165,12 @@ func _on_time_weather_received(data: Dictionary) -> void:
 
 
 func _get_season_name(progress: float) -> String:
-	var p: float = fmod(progress, 1.0)
-	if p < 0.25:
+	var p: float = fmod(fmod(progress, 4.0) + 4.0, 4.0)
+	if p < 1.0:
 		return "Spring"
-	elif p < 0.50:
+	elif p < 2.0:
 		return "Summer"
-	elif p < 0.75:
+	elif p < 3.0:
 		return "Autumn"
 	else:
 		return "Winter"
@@ -189,24 +238,28 @@ func add_feed_message(data: Dictionary) -> void:
 		var btn_app: Button = Button.new()
 		btn_app.text = "✔ Approve & Apply"
 		btn_app.modulate = Color(0.4, 1.0, 0.5, 1.0)
+
+		var btn_rej: Button = Button.new()
+		btn_rej.text = "✖ Reject"
+		btn_rej.modulate = Color(1.0, 0.4, 0.4, 1.0)
+
 		btn_app.pressed.connect(func():
 			var bridge: Node = get_node_or_null("/root/WsBridgeClient")
 			if bridge:
 				bridge.send_god_codex_approve(proposal_id)
 			btn_app.disabled = true
 			btn_app.text = "Approved"
+			btn_rej.disabled = true
 		)
 		hbox_btn.add_child(btn_app)
 
-		var btn_rej: Button = Button.new()
-		btn_rej.text = "✖ Reject"
-		btn_rej.modulate = Color(1.0, 0.4, 0.4, 1.0)
 		btn_rej.pressed.connect(func():
 			var bridge: Node = get_node_or_null("/root/WsBridgeClient")
 			if bridge:
 				bridge.send_god_codex_reject(proposal_id)
 			btn_rej.disabled = true
 			btn_rej.text = "Rejected"
+			btn_app.disabled = true
 		)
 		hbox_btn.add_child(btn_rej)
 
@@ -311,4 +364,5 @@ func _on_palace_entry_requested(data: Dictionary) -> void:
 	message_container.move_child(item, 0)
 	if council_drawer and not council_drawer.visible:
 		council_drawer.visible = true
+		btn_toggle_feed.text = "Council Feed ▲"
 

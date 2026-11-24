@@ -43,6 +43,14 @@ func _connect_bridge_signals() -> void:
 		bridge.connect("bubble_sync_received", Callable(self, "_on_bubble_sync_received"))
 		bridge.connect("connected_to_bridge", Callable(self, "_on_bridge_connected"))
 		bridge.connect("disconnected_from_bridge", Callable(self, "_on_bridge_disconnected"))
+		bridge.connect("god_focus_changed", Callable(self, "_on_god_focus_changed"))
+		visible = (float(bridge.camera_altitude) < 220.0)
+
+
+func _on_god_focus_changed(_pos: Vector3, _is_orbital: bool) -> void:
+	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
+	if bridge:
+		visible = (float(bridge.camera_altitude) < 220.0)
 
 
 func clear_all_actors() -> void:
@@ -69,26 +77,51 @@ func _on_bubble_sync_received(data: Dictionary) -> void:
 
 func sync_bubble_agents(agent_list: Array) -> void:
 	TerrainHeightSampler.ensure_loaded()
-	var count: int = min(agent_list.size(), POOL_SIZE)
-	_active_actors_by_id.clear()
-
-	for i in range(count):
-		var agent_data: Dictionary = agent_list[i]
-		var px: float = float(agent_data.get("x", 0.0))
-		var pz: float = float(agent_data.get("z", 0.0))
-		agent_data["y"] = TerrainHeightSampler.get_height(px, pz)
-
-		var actor: Node3D = _actor_pool[i]
-		actor.bind_agent_data(agent_data)
-		var aid: String = agent_data.get("agent_id", "")
+	var new_agents_by_id: Dictionary = {}
+	for raw_data in agent_list:
+		if typeof(raw_data) != TYPE_DICTIONARY:
+			continue
+		var aid: String = raw_data.get("agent_id", "")
 		if aid != "":
-			_active_actors_by_id[aid] = actor
+			var px: float = float(raw_data.get("x", 0.0))
+			var pz: float = float(raw_data.get("z", 0.0))
+			raw_data["y"] = TerrainHeightSampler.get_height(px, pz)
+			new_agents_by_id[aid] = raw_data
 
-	# Release remaining pooled slots
-	for i in range(count, POOL_SIZE):
-		var actor: Node3D = _actor_pool[i]
-		if actor.is_pool_active or actor.visible:
-			actor.release_to_pool()
+	# 1. Release actors whose agent_id exited agent_list
+	var to_remove: Array[String] = []
+	for aid in _active_actors_by_id:
+		if not new_agents_by_id.has(aid):
+			var actor: Node3D = _active_actors_by_id[aid]
+			if actor:
+				actor.release_to_pool()
+			to_remove.append(aid)
+
+	for aid in to_remove:
+		_active_actors_by_id.erase(aid)
+
+	# 2. Update existing active actors that are still present
+	for aid in _active_actors_by_id:
+		var actor: Node3D = _active_actors_by_id[aid]
+		var data: Dictionary = new_agents_by_id[aid]
+		actor.bind_agent_data(data)
+
+	# 3. Find unused actors in pool for newly entered agent_ids
+	var unused_actors: Array[Node3D] = []
+	for actor in _actor_pool:
+		if not actor.is_pool_active and not actor.visible:
+			unused_actors.append(actor)
+
+	var unused_idx: int = 0
+	for aid in new_agents_by_id:
+		if _active_actors_by_id.has(aid):
+			continue
+		if unused_idx >= unused_actors.size():
+			break  # Pool exhausted up to POOL_SIZE
+		var actor: Node3D = unused_actors[unused_idx]
+		unused_idx += 1
+		actor.bind_agent_data(new_agents_by_id[aid])
+		_active_actors_by_id[aid] = actor
 
 
 func get_active_count() -> int:

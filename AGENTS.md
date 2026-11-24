@@ -99,15 +99,10 @@ Do **not** violate these rules in any module or refactor:
 ## 4. Repository Layout
 ```text
 .
-├── AGENTS.md                                      # Master agent instructions & QA protocol (this file)
+├── AGENTS.md                                      # Master agent instructions & architecture rules (this file)
 ├── .python-version                                # Pinned via `uv python pin 3.12`
 ├── pyproject.toml                                 # Managed exclusively via `uv`
 ├── uv.lock
-├── .qa_loop/                                      # Git-ignored multi-agent QA orchestration state
-│   ├── precautions.json                           # Shared guardrails (Main Agent write-only)
-│   ├── file_locks.json                            # Strict mutual exclusion locks
-│   ├── handoff_reports/                           # Sub-agent escalation reports
-│   └── backups/                                   # Ephemeral SHA-256 atomic rollback snapshots
 ├── docs/
 │   ├── INDEX.md                                       # Master documentation directory & architecture index
 │   ├── architecture/
@@ -140,7 +135,6 @@ Do **not** violate these rules in any module or refactor:
 │   ├── knowledge_merge.py                             # Atomic World Library merge CLI with deduplication
 │   ├── knowledge_review.py                            # 3-Stage pre-merge review CLI for staged packs
 │   ├── launch_gaia.py                                 # One-command simulator & Godot client launcher
-│   ├── qa_loop_guard.py                               # Deterministic multi-agent QA loop & rollback guard
 │   ├── setup_uv_env.sh                                # Pins compatible Python via uv & syncs dependencies
 │   ├── unpack_and_import_assets.py                    # Asset extractor and importer utility
 │   └── verify_live_qwen.py                            # Live smoke test for Qwen3.5-4B via llama-server
@@ -152,12 +146,16 @@ Do **not** violate these rules in any module or refactor:
 │   ├── lifecycle.py                                   # Aging, stage gates, pregnancy, crying, death
 │   ├── races.py                                       # RaceProfile registry (5 races), Dragon morph controller
 │   ├── brains/
+│   │   ├── action_bridge.py                           # CognitiveActionExecutor bridging neural logits to world actions
 │   │   ├── consolidation.py                           # Sleep-cycle consolidation & stability gate
 │   │   ├── hierarchical_brain.py                      # 3-Tier hierarchical brain composition engine
 │   │   ├── memory_rag.py                              # Grounded RAG index with strict known_books asymmetry
 │   │   ├── personality.py                             # 10-D personality vector & dynamic mood states
 │   │   ├── profession_nets.py                         # ProfessionNetRegistry (10 professions Lv. 1-10)
 │   │   └── shared_living_net.py                       # SharedLivingNet universal survival/reflex MLP
+│   ├── bridge/
+│   │   ├── godot_ws_bridge.py                         # WebSocket server bridge (ws://127.0.0.1:8765)
+│   │   └── protocol.py                                # Binary PackedFloat32Array & JSON frame contracts
 │   ├── divine/
 │   │   ├── autonomy.py                                # Autonomous Divine Agenda Engine (6 deities)
 │   │   ├── god_ledger.py                              # GodPresenceTracker, salience grouping, daily .md ledger
@@ -167,6 +165,7 @@ Do **not** violate these rules in any module or refactor:
 │   ├── god_console/
 │   │   └── cli.py                                     # Interactive Rich God CLI (inspection, intervention, rewind)
 │   ├── knowledge/
+│   │   ├── db_loader.py                               # Atomic database loader & known books indexer
 │   │   ├── dedupe.py                                  # 3-Stage cascaded deduplication engine
 │   │   └── schema.py                                  # KnowledgePack Pydantic models & validation rules
 │   ├── neural/
@@ -177,6 +176,7 @@ Do **not** violate these rules in any module or refactor:
 │   ├── persistence/
 │   │   ├── checkpoints.py                             # Atomic Two-Phase Commit (SHA-256 manifest) + rewind
 │   │   ├── db.py                                      # SQLite WAL atomic end-of-day writer + DuckDB analytics
+│   │   ├── state_serializer.py                        # Dedicated daily SQL deltas & checkpoint state serializer
 │   │   └── world_goddess.py                           # WorldGoddessCritic RBAC/validation matrix & verdicts
 │   ├── resilience/
 │   │   └── healer.py                                  # Self-Healing Error Solver + 5-faults/day escalation
@@ -213,10 +213,12 @@ Do **not** violate these rules in any module or refactor:
 │   ├── addons/                                        # Terrain3D v1.1.0, Sky3D v2.1, VRM Importer & MToon v2.6.1
 │   ├── assets/                                        # 7 VRoid deities, 6 Quaternius rigs + Demon rig, props, audio
 │   ├── scenes/                                        # MainWorld, RealityBubble, Landmarks, Buildings, UI Modals
-│   ├── shaders/                                       # TerrainBiome, WaterStylized, GrassSway, StylizedToonSeason
-│   └── scripts/                                       # Controllers, managers, animators, and UI modal scripts
-├── tests/                                             # 22 test files (109 passing tests under pytest)
+│   ├── shaders/                                       # TerrainBiome, WaterStylized, GrassSway, EmissiveWindow
+│   └── scripts/                                       # Controllers, UiStateManager, animators, and UI modal scripts
+├── tests/                                             # 29 test files (182 passing tests under pytest)
 │   ├── conftest.py
+│   ├── test_aa_step2_dialogue_and_bubble.py
+│   ├── test_aa_step3a_visuals_and_rigging.py
 │   ├── test_batched_neural_unbounded.py
 │   ├── test_divine_hierarchy_patronage_and_councils.py
 │   ├── test_economy_double_entry_inflation.py
@@ -233,11 +235,19 @@ Do **not** violate these rules in any module or refactor:
 │   ├── test_palace_security_and_knights.py
 │   ├── test_persistence_corruption_rewind.py
 │   ├── test_politics_borders_library_religion.py
-│   ├── test_qa_loop.py
 │   ├── test_races_gender_pregnancy_dragon_morph.py
 │   ├── test_regional_weather.py
 │   ├── test_schemas.py
 │   ├── test_spatial_awareness_speech_and_deity_ai.py
+│   ├── test_wave1_ipc_and_protocol.py
+│   ├── test_wave2_cognitive_action_and_books.py
+│   ├── test_wave2_world_and_deities.py
+│   ├── test_wave3_economy_security_navigation.py
+│   ├── test_wave3_godot_presentation_and_ui.py
+│   ├── test_wave4_cognitive_lifecycle_divine.py
+│   ├── test_wave4_economy_housing_and_gear.py
+│   ├── test_wave5_persistence_restore_and_knowledge_cli.py
+│   ├── test_wave6_hygiene_and_benchmarks.py
 │   └── test_world_goddess_rbac_and_atomic_save.py
 └── data/                                              # Git-ignored runtime state (DB, checkpoints, god_ledger)
 ```
@@ -265,178 +275,15 @@ uv run python -m sim_core.tools.bench_tensors --agents 10000 --steps 50
 
 ---
 
-## 7. Multi-Agent QA Execution Loop & Atomic Rollback Protocol (`.qa_loop/`)
+## 7. Git Hygiene, Verification Protocol & Spec Compliance
 
-All implementation work across Phases 0–5 MUST execute through this deterministic **Main Agent (Orchestrator) → Sub-Agent (Fresh Context)** quality loop so failed edits never leave half-broken code in the repository.
-
-### 7.1 End-to-End Execution Flow
-```text
-[MAIN AGENT (Orchestrator)]
-  │ 1. Verifies no leftover `.qa_loop/backups/<task_id>/` exists (crash recovery)
-  │ 2. Partitions tasks by file ownership (strictly disjoint files)
-  │ 3. Acquires locks in `file_locks.json` & updates `precautions.json`
-  ▼
-[SPAWN SUB-AGENT (Fresh Context)] ◄───────────────────────────────┐
-  │                                                               │
-  ├─► Step 1: Read `precautions.json` + Handoff Findings (if any) │
-  ├─► Step 2: Plan & Self-Critique ("Think & Verify Plan")        │
-  ├─► Step 3: Create SHA-256 backup snapshot in `.qa_loop/backups`│
-  │                                                               │
-  │   ┌──► [INNER LOOP: Max 3 Attempts] ──────────────────────┐   │
-  │   │     4. Apply code edits to owned files                │   │
-  │   │     5. Run targeted tests + linters/typechecks (`uv`) │   │
-  │   │     6. Verify output against acceptance criteria      │   │
-  │   │     7. If FAIL & attempt < 3:                         │   │
-  │   │        Diagnose -> Re-plan -> Verify Plan -> Loop ────┘   │
-  │   └───────────────────────────────────────────────────────┘   │
-  │                                                               │
-  ├─► IF PASS: Purge backup folder -> Release locks -> Report OK  │
-  │                                                               │
-  └─► IF FAIL (3/3):                                              │
-        ├─► 8. ATOMIC TRANSACTION (All-or-Nothing):               │
-        │      Validate SHA-256 -> Stage & fsync -> Atomic swap   │
-        │      -> Verify restored hashes -> Atomic delete backup  │
-        ├─► 9. Emit `handoff_report.json` & release locks         │
-        └─► 10. Escalate clean codebase to Main Agent ────────────┤
-                                                                  │
-[MAIN AGENT ANALYZES FAILURE]                                     │
-  │ • Detects repeated mistakes -> Appends rule to `precautions.json`
-  │ • Kills old sub-agent context & spawns NEW sub-agent ─────────┘
-```
-
-### 7.2 Core Data Contracts (JSON Schemas)
-
-#### A. `.qa_loop/precautions.json` (Shared Guardrails)
-**Permissions:** Only the Main Agent has write access. Every Sub-Agent MUST read this file as its very first action before planning.
-```json
-{
-  "global_rules": [
-    "Never use system python3 or pip on Fedora 45; execute everything via `uv run` on pinned Python 3.12.",
-    "Godot must NEVER open or write directly to `data/civilization.db`; route edits via Python WebSocket.",
-    "Always run pytest with `uv run pytest --tb=short -q` to keep test logs compact."
-  ],
-  "anti_patterns_detected": [
-    {
-      "id": "ERR-001",
-      "pattern": "Sub-agents repeatedly mocked database calls instead of using the local SQLite fixture.",
-      "mandatory_fix": "Use the `db_session` fixture from `tests/conftest.py`.",
-      "added_after_task": "task_01_run_1"
-    }
-  ],
-  "environment_constraints": {
-    "python_manager": "uv",
-    "pinned_python": "3.12",
-    "python_runner": "uv run pytest --tb=short -q",
-    "linter": "uv run ruff check sim_core tests"
-  }
-}
-```
-
-#### B. `.qa_loop/file_locks.json` (Strict Mutual Exclusion)
-**Permissions:** Managed atomically by the Main Agent so no two sub-agents can read or write the same file concurrently.
-```json
-{
-  "active_locks": {
-    "sim_core/persistence/world_goddess.py": {
-      "owner_agent_id": "subagent_alpha_02",
-      "task_id": "phase1_task_02",
-      "mode": "EXCLUSIVE_RW",
-      "acquired_at": "2026-11-21T05:25:00Z",
-      "expires_at": "2026-11-21T05:35:00Z"
-    }
-  }
-}
-```
-
-#### C. `.qa_loop/backups/<task_id>/manifest.json` (Backup Integrity & Atomic Rollback Contract)
-**Permissions:** Written once by the Sub-Agent before Attempt 1. Used to verify bit-for-bit restoration before deleting backups.
-```json
-{
-  "task_id": "phase1_task_02",
-  "subagent_id": "subagent_alpha_01",
-  "created_at": "2026-11-21T05:25:02Z",
-  "files": {
-    "sim_core/persistence/world_goddess.py": {
-      "backup_rel_path": "sim_core/persistence/world_goddess.py.orig",
-      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    }
-  }
-}
-```
-
-#### D. `.qa_loop/handoff_reports/<task_id>_<subagent_id>.json` (Sub-Agent → Main Agent Escalation)
-Emitted only after the atomic rollback and backup purge have committed, proving the workspace is back to a clean baseline.
-```json
-{
-  "task_id": "phase1_task_02",
-  "subagent_id": "subagent_alpha_01",
-  "status": "FAILED_MAX_RETRIES",
-  "rollback_transaction": {
-    "status": "COMMITTED",
-    "files_restored": ["sim_core/persistence/world_goddess.py"],
-    "checksums_verified": true,
-    "backup_purged": true
-  },
-  "attempts_used": 3,
-  "attempt_history": [
-    {
-      "attempt": 1,
-      "hypothesis": "Validated Elder Council quorum against total_nations * 2.",
-      "result": "FAILED",
-      "error_signature": "AssertionError: Expected >50% of currently appointed elders, not max seats"
-    },
-    {
-      "attempt": 2,
-      "hypothesis": "Checked approvals >= total_appointed_elders / 2.",
-      "result": "FAILED",
-      "error_signature": "AssertionError: 2 of 4 votes must NOT pass strict >50% rule"
-    },
-    {
-      "attempt": 3,
-      "hypothesis": "Added bypass flag check before Elder vote tally.",
-      "result": "FAILED",
-      "error_signature": "Regression in test_unauthorized_library_edit_blocked"
-    }
-  ],
-  "root_cause_analysis": "Strict majority requires integer `approvals * 2 > total_appointed_elders` and `bypass_god_check` must only accept verified God origin.",
-  "recommended_next_strategy": "Use integer comparison `len(votes_approve) * 2 > len(living_appointed_elders)` and gate bypass strictly on `proposal.bypass_god_check`."
-}
-```
-
-### 7.3 Step-by-Step Execution Protocol
-- **Stage A — Main Agent Pre-Flight & Partitioning:**
-  1. **Orphaned Transaction Sweep:** Before scheduling any task, check `.qa_loop/backups/`. If an incomplete backup directory exists from a crashed sub-agent, complete its atomic restore-and-purge transaction first.
-  2. **File Ownership Partitioning:** Map every file each task will read or modify. Tasks with strictly disjoint file sets may run in parallel; tasks sharing even one file run sequentially.
-  3. **Lock Acquisition:** Write exclusive lock entries into `file_locks.json` before spawning the sub-agent. Any tool-level `read_file` or `write_file` call checks `file_locks.json` first and immediately throws `LOCK_VIOLATION` if the agent ID does not match.
-- **Stage B — Sub-Agent Internal Loop (Max 3 Iterations):**
-  1. **Ingest Guardrails & History:** Read `.qa_loop/precautions.json` and any prior `handoff_report.json`.
-  2. **Plan & Critical Verification Gate:** Formulate a step-by-step plan (files, logic, edge cases, verification tests) and self-critique against `precautions.json` and prior `attempt_history` so disproven hypotheses are never repeated.
-  3. **Immutable SHA-256 Backup Snapshot (Before Attempt 1 Only):** Copy each target file to `.qa_loop/backups/<task_id>/<path>.orig` and record `original_sha256` in `manifest.json`. Attempts 2 and 3 **never** touch or overwrite `.orig` or `manifest.json`.
-  4. **Execute, Test & Iterate (`attempt = 1..3`):** Edit owned files → run `uv run ruff check` and targeted `uv run pytest --tb=short -q` → verify acceptance criteria.
-     - **PASS:** Atomically delete `.qa_loop/backups/<task_id>/`, release locks in `file_locks.json`, report `SUCCESS`.
-     - **FAIL & `attempt < 3`:** Diagnose exact error logs, re-plan, verify against `precautions.json`, loop.
-     - **FAIL & `attempt == 3`:** Execute Stage C (Atomic Rollback & Purge).
-- **Stage C — 4-Stage Atomic Restore & Backup Purge Transaction (All-or-Nothing):**
-  1. **Stage 1 (Pre-Flight Validation — Read-Only):** Verify `manifest.json` and every `.orig` file exist and match `original_sha256`. **Abort Condition:** If any backup file is missing or corrupted, halt immediately without touching any live file, keep file locks held, and escalate `ROLLBACK_ABORTED`.
-  2. **Stage 2 (Co-Located Staging + `fsync`):** Copy each `.orig` file to a hidden temporary sibling in the **exact same parent directory** as the target file (e.g., `sim_core/persistence/.world_goddess.py.restore_tmp`) and call `fsync()`. Same-mount staging guarantees an atomic swap.
-  3. **Stage 3 (Atomic POSIX Swap + Re-Hash):** Atomically `rename()` each `.restore_tmp` file over its live target file. Re-hash every restored live file and confirm bit-for-bit match against `original_sha256`.
-  4. **Stage 4 (Atomic Backup Purge — Commit Point):** Only after all live files pass SHA-256 verification, atomically rename `.qa_loop/backups/<task_id>` to `.qa_loop/backups/.trash_<task_id>` and delete it. Write `handoff_report.json` with `"status": "COMMITTED"`, release all locks in `file_locks.json`, and terminate.
-- **Stage D — Main Agent Escalation, Respawn & Outer Circuit Breaker:**
-  1. Inspect `handoff_report.json` alongside prior reports; append recurring failure rules to `anti_patterns_detected` in `precautions.json`.
-  2. Discard the old sub-agent context, re-lock files, and spawn a fresh sub-agent on the guaranteed-pristine codebase.
-  3. **Outer Circuit Breaker (`MAX_SPAWNS = 4`, totaling 12 attempts):** If all 4 outer spawns fail, halt and present the consolidated `handoff_report` history to the human operator with the workspace safely intact.
-
-### 7.4 Critical Edge Cases Guarded
-| Failure Mode | Prevention Mechanism |
-| :--- | :--- |
-| **Crash Mid-Rollback (Half-Restored State)** | Stage 2 stages and `fsync`s temp files before Stage 3 performs atomic `rename()` swaps. If killed before Stage 4 deletes the backup dir, the Main Agent detects the surviving backup on startup and deterministically finishes Stages 1–4. |
-| **Corrupted Backup Overwriting Live Code** | Stage 1 validates SHA-256 hashes of all `.orig` files read-only before touching any live file; validation failure aborts cleanly and holds locks to preserve evidence. |
-| **Cross-Filesystem Non-Atomic Moves** | Temporary `.restore_tmp` files are created in the exact parent directory of each target file rather than `/tmp`, guaranteeing atomic metadata pointer swaps on the same mount. |
-| **Two Sub-Agents Colliding on a File** | Upfront disjoint file partitioning + tool-level enforcement against `file_locks.json` blocks both concurrent reads and writes (`LOCK_VIOLATION`). |
-| **Infinite Outer Respawn Loops** | Hard cap (`MAX_SPAWNS = 4`) paired with mandatory `precautions.json` updates ensures each fresh sub-agent explores a genuinely new strategy. |
-
-### 7.5 Spec Reading, Phase Order & User-Confirmed External Downloads
-1. **Read the relevant v3.0 spec under `docs/`** before implementing any subsystem (`ARCHITECTURE.md`, `GODOT_CLIENT_AND_ASSETS_SPEC.md`, `NEURAL_AND_LIFECYCLE_SPEC.md`, `RACES_AND_BIOLOGY_SPEC.md`, `DIVINE_HIERARCHY_SPEC.md`, `SOCIETY_AND_GOVERNANCE_SPEC.md`, `DATA_SCHEMA_AND_WORLD_GODDESS.md`).
-2. **Follow `docs/roadmap/IMPLEMENTATION_ROADMAP.md` strictly in phase order (`Phase 0 → Phase 5`).** Never build `godot_client/` until the headless Python core passes all unit, double-entry conservation, corruption-rewind, and 1,500-agent 5-race soak tests.
-3. **Never silently drop requirements.** If a spec rule conflicts with a library limitation, document the fallback in code comments while keeping the architectural invariant intact.
-4. **Always request explicit user confirmation** before downloading external software (`Godot 4.7.2`, `Blender`, `VRoid Studio`) or third-party asset packs.
+1. **Standard Git Hygiene:**
+   - Before starting and before signing off on any task, inspect `git status --short` and review `git diff` to confirm all changes are intentional, cleanly scoped, and free of leftover temporary or scratch files in the repository root.
+   - If multi-agent or parallel sub-agent work is used, partition tasks across strictly disjoint file sets so agents never edit the same file concurrently.
+2. **Read the Relevant Spec Under `docs/` First:**
+   - Always inspect the canonical specification under `docs/` before modifying a subsystem (`ARCHITECTURE.md`, `GODOT_CLIENT_AND_ASSETS_SPEC.md`, `WORLD_GEOGRAPHY_AND_SETTLEMENTS_V4.md`, `HYBRID_COGNITIVE_AND_LLM_SPEC.md`, `ECONOMY_HOUSING_AND_GEAR_SPEC.md`, `WEBSOCKET_PROTOCOL_SPEC.md`, `NEURAL_AND_LIFECYCLE_SPEC.md`, `RACES_AND_BIOLOGY_SPEC.md`, `DIVINE_HIERARCHY_SPEC.md`, `SOCIETY_AND_GOVERNANCE_SPEC.md`, `DATA_SCHEMA_AND_WORLD_GODDESS.md`).
+3. **Follow `docs/roadmap/IMPLEMENTATION_ROADMAP.md` & Architectural Invariants:**
+   - Ensure the headless Python core passes all unit, double-entry conservation, corruption-rewind, and 1,500-agent 5-race soak tests alongside any Godot 4.7.2 client work.
+   - Never silently drop requirements. If a spec rule conflicts with a library limitation, document the fallback in code comments while keeping the architectural invariant intact.
+4. **User-Confirmed External Downloads:**
+   - Always request explicit user confirmation before downloading external software (`Godot 4.7.2`, `Blender`, `VRoid Studio`) or third-party asset packs.

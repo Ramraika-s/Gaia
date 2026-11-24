@@ -74,6 +74,13 @@ DEITY_SPECS: dict[DeitySlot, dict[str, Any]] = {
 }
 
 PALACE_COURTYARD_DAIS = Vec3(x=0.0, y=32.0, z=15.0)
+DEITY_COUNCIL_ORDER: list[DeitySlot] = [
+    "gm_human",
+    "gm_elf",
+    "gm_dragon",
+    "gm_beasthuman",
+    "gm_demon",
+]
 
 
 class AutonomousDeity:
@@ -85,7 +92,9 @@ class AutonomousDeity:
         self.title: str = spec["title"]
         self.race: str = spec["race"]
         self.home_pos: Vec3 = spec["home"].model_copy()
+        self.dais_offset: float = float(spec.get("dais_offset", 1.2))
         self.pos: Vec3 = spec["home"].model_copy()
+        self.pos.y = round(self.home_pos.y + self.dais_offset, 2)
         self.yaw: float = 0.0
         self.speed: float = 0.0
         self.activity_state: str = "AUDIENCE" if slot == "world_goddess" else "GOVERNING"
@@ -93,8 +102,7 @@ class AutonomousDeity:
         self.speech_text: str = ""
         self.speech_ticks_remaining: int = 0
         self.current_order: str | None = None
-        self.current_agenda: str = "AUDIENCE" if slot == "world_goddess" else "GOVERNING"
-        self.dais_offset: float = float(spec.get("dais_offset", 1.2))
+        self.current_agenda: str = "IDLE"
 
     def set_speech(self, text: str, duration_ticks: int = 12) -> None:
         self.speech_text = text
@@ -132,6 +140,23 @@ class DivineAutonomyEngine:
         self.deities: dict[DeitySlot, AutonomousDeity] = {}
         for slot, spec in DEITY_SPECS.items():
             self.deities[slot] = AutonomousDeity(slot, spec)
+        self._ground_all_deities()
+
+    def _ground_all_deities(self) -> None:
+        """Grounds all deities at their positions, applying dais offset if near home."""
+        if not self.engine or not hasattr(self.engine, "heightmap"):
+            return
+        for deity in self.deities.values():
+            try:
+                elev = float(self.engine.heightmap.get_elevation(deity.pos.x, deity.pos.z))
+                dist_home = math.hypot(
+                    deity.pos.x - deity.home_pos.x,
+                    deity.pos.z - deity.home_pos.z,
+                )
+                on_home_dais = dist_home <= 8.5
+                deity.pos.y = round(elev + (deity.dais_offset if on_home_dais else 0.0), 2)
+            except (AttributeError, TypeError):
+                pass
 
     def issue_god_order(
         self,
@@ -156,8 +181,9 @@ class DivineAutonomyEngine:
                 else:
                     deity.current_order = "CONVENE_COUNCIL"
                     deity.current_agenda = "CONVENE_COUNCIL"
-                    # Spread God-Mothers around dais
-                    ang = math.pi * 0.4 * len(deity.slot)
+                    # Spread 5 God-Mothers evenly at 72° spacing around dais
+                    idx = DEITY_COUNCIL_ORDER.index(slot) if slot in DEITY_COUNCIL_ORDER else 0
+                    ang = (2.0 * math.pi / 5.0) * idx
                     deity.target_pos = Vec3(
                         x=round(PALACE_COURTYARD_DAIS.x + 8.0 * math.cos(ang), 2),
                         y=32.0,
@@ -202,15 +228,20 @@ class DivineAutonomyEngine:
             # Check for pending library proposals
             has_pending_books = False
             if self.engine and hasattr(self.engine, "governance_engine"):
-                has_pending_books = any(
-                    p.status == "PENDING_DAUGHTERS"
-                    for p in self.engine.governance_engine.library_proposals.values()
-                )
+                gov = getattr(self.engine, "governance_engine", None)
+                gov_props = getattr(gov, "library_proposals", None)
+                if isinstance(gov_props, dict):
+                    has_pending_books = any(
+                        getattr(p, "status", None) in ("PENDING_GODMOTHERS", "OBJECTION_WINDOW")
+                        for p in gov_props.values()
+                    )
 
             # Check WTC CPI
             cpi = 1.0
             if self.engine and hasattr(self.engine, "wtc"):
-                cpi = getattr(self.engine.wtc, "fisher_cpi", 1.0)
+                raw_cpi = getattr(self.engine.wtc, "cpi", 1.0)
+                if isinstance(raw_cpi, (int, float)):
+                    cpi = float(raw_cpi)
 
             if has_pending_books:
                 if goddess.activity_state != "INSPECTING_LIBRARY":
@@ -235,25 +266,34 @@ class DivineAutonomyEngine:
                     goddess.activity_state = "COURTYARD_STROLL"
 
         # 2. God-Mothers Autonomous Routine (if no active direct God order)
-        for slot in ("gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"):
+        for idx, slot in enumerate(DEITY_COUNCIL_ORDER):
             gm = self.deities.get(slot)
             if not gm or gm.current_order:
                 continue
 
             # Periodically stroll city center and gates
-            tick_mod = (current_tick + hash(slot)) % 400
+            tick_mod = (current_tick + idx * 73) % 400
             if tick_mod < 250 and gm.activity_state != "GOVERNING":
                 gm.target_pos = gm.home_pos.model_copy()
                 gm.activity_state = "GOVERNING"
             elif tick_mod >= 250 and gm.activity_state != "CITY_PATROL":
                 # Offset 35m outward from palace
-                ang = math.pi * 0.4 * (tick_mod % 5)
+                ang = (2.0 * math.pi / 5.0) * (tick_mod % 5)
                 gm.target_pos = Vec3(
                     x=round(gm.home_pos.x + 35.0 * math.cos(ang), 2),
                     y=gm.home_pos.y,
                     z=round(gm.home_pos.z + 35.0 * math.sin(ang), 2),
                 )
                 gm.activity_state = "CITY_PATROL"
+
+        # Sync bestowed names from divine hierarchy if available
+        if self.engine and hasattr(self.engine, "divine_hierarchy"):
+            entities = getattr(self.engine.divine_hierarchy, "entities", {})
+            for slot, deity in self.deities.items():
+                if slot in entities:
+                    bestowed = getattr(entities[slot], "bestowed_name", None)
+                    if bestowed:
+                        deity.name = bestowed
 
         # 3. Dynamic Movement Stepping
         for deity in self.deities.values():
@@ -275,7 +315,14 @@ class DivineAutonomyEngine:
                     deity.pos.z = deity.target_pos.z
                     deity.speed = 0.0
                     deity.target_pos = None
-                    if deity.current_order in ("RETURN_PALACE", "PATROL_PLAZA"):
+                    if deity.current_order == "CONVENE_COUNCIL":
+                        if deity.slot == "world_goddess":
+                            deity.yaw = round(math.atan2(0.0, -1.0), 3)  # face +Z
+                        else:
+                            dx_in = PALACE_COURTYARD_DAIS.x - deity.pos.x
+                            dz_in = PALACE_COURTYARD_DAIS.z - deity.pos.z
+                            deity.yaw = round(math.atan2(-dx_in, -dz_in), 3)
+                    elif deity.current_order in ("RETURN_PALACE", "PATROL_PLAZA"):
                         deity.current_order = None
                 else:
                     move_speed = 3.5  # meters per second
@@ -283,18 +330,24 @@ class DivineAutonomyEngine:
                     step = min(dist, move_speed * dt)
                     deity.pos.x += (dx / dist) * step
                     deity.pos.z += (dz / dist) * step
-                    deity.yaw = round(math.atan2(dx, dz), 3)
+                    deity.yaw = round(math.atan2(-dx, -dz), 3)
                     deity.speed = move_speed
-
-                # Ground elevation look-up
-                if self.engine and hasattr(self.engine, "heightmap"):
-                    try:
-                        elev = self.engine.heightmap.get_elevation(deity.pos.x, deity.pos.z)
-                        deity.pos.y = elev + deity.dais_offset
-                    except Exception:
-                        pass
             else:
                 deity.speed = 0.0
+
+        # Ground elevation look-up with dais proximity check for all deities
+        if self.engine and hasattr(self.engine, "heightmap"):
+            for deity in self.deities.values():
+                try:
+                    elev = float(self.engine.heightmap.get_elevation(deity.pos.x, deity.pos.z))
+                    dist_home = math.hypot(
+                        deity.pos.x - deity.home_pos.x,
+                        deity.pos.z - deity.home_pos.z,
+                    )
+                    on_home_dais = dist_home <= 8.5
+                    deity.pos.y = round(elev + (deity.dais_offset if on_home_dais else 0.0), 2)
+                except (AttributeError, TypeError):
+                    pass
 
     def get_sync_records(self) -> list[DeitySyncRecord]:
         return [d.to_sync_record() for d in self.deities.values()]

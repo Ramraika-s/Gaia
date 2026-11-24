@@ -62,7 +62,6 @@ GEAR_CATALOG: dict[str, GearItemSpec] = {
         crafter_profession="BLACKSMITH",
         description="Polished steel harness crafted for palace guards and knights.",
     ),
-
     # Accessories
     "HOOD": GearItemSpec(
         item_id="HOOD",
@@ -96,7 +95,6 @@ GEAR_CATALOG: dict[str, GearItemSpec] = {
         crafter_profession="BLACKSMITH",
         description="Enclosed brass lantern casting warm light on night roads.",
     ),
-
     # Tools & Weapons
     "HOE": GearItemSpec(
         item_id="HOE",
@@ -258,22 +256,21 @@ class GearEconomyEngine:
         if spec.category == "CLOTHING":
             # Max 1 clothing: remove any existing clothing
             equipped = [
-                i for i in equipped
-                if i in GEAR_CATALOG and GEAR_CATALOG[i].category != "CLOTHING"
+                i for i in equipped if i in GEAR_CATALOG and GEAR_CATALOG[i].category != "CLOTHING"
             ]
             equipped.append(item_id)
         elif spec.category == "TOOL_WEAPON":
             # Max 1 tool/weapon: remove existing tool/weapon
             equipped = [
-                i for i in equipped
+                i
+                for i in equipped
                 if i in GEAR_CATALOG and GEAR_CATALOG[i].category != "TOOL_WEAPON"
             ]
             equipped.append(item_id)
         elif spec.category == "ACCESSORY":
             # Max 2 accessories
             accessories = [
-                i for i in equipped
-                if i in GEAR_CATALOG and GEAR_CATALOG[i].category == "ACCESSORY"
+                i for i in equipped if i in GEAR_CATALOG and GEAR_CATALOG[i].category == "ACCESSORY"
             ]
             if len(accessories) >= 2 and item_id not in accessories:
                 # Replace oldest accessory
@@ -310,15 +307,21 @@ class GearEconomyEngine:
                     ["SWORD", "HAMMER", "HOE", "KNIGHT_PLATE", "LANTERN", "PAULDRONS"]
                     if role == "BLACKSMITH"
                     else [
-                        "PEASANT_TUNIC", "RANGER_CLOAK", "NOBLE_GARB", "TOME", "AMULET", "HOOD",
-                        "SWORD", "HOE", "KNIGHT_PLATE", "LANTERN"
+                        "PEASANT_TUNIC",
+                        "RANGER_CLOAK",
+                        "NOBLE_GARB",
+                        "TOME",
+                        "AMULET",
+                        "HOOD",
+                        "SWORD",
+                        "HOE",
+                        "KNIGHT_PLATE",
+                        "LANTERN",
                     ]
                 )
                 for item_id in target_items:
                     shop_id = f"shop_{agent.agent_id}"
-                    shop = self.shops.get(
-                        shop_id, ShopInventory(shop_id, agent.agent_id, "city")
-                    )
+                    shop = self.shops.get(shop_id, ShopInventory(shop_id, agent.agent_id, "city"))
                     curr_stock = shop.stock.get(item_id, 0)
                     if curr_stock < 2:
                         self.craft_item(agent, item_id, bank)
@@ -357,13 +360,15 @@ class GearEconomyEngine:
 
                     ok = self.purchase_and_equip(agent, item_id, seller, bank)
                     if ok:
-                        events.append({
-                            "type": "GEAR_PURCHASED",
-                            "agent_id": agent.agent_id,
-                            "item_id": item_id,
-                            "price": spec.price,
-                            "tick": current_tick,
-                        })
+                        events.append(
+                            {
+                                "type": "GEAR_PURCHASED",
+                                "agent_id": agent.agent_id,
+                                "item_id": item_id,
+                                "price": spec.price,
+                                "tick": current_tick,
+                            }
+                        )
                     break  # One gear purchase per tick
 
         return events

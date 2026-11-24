@@ -658,7 +658,42 @@ CREATE TABLE IF NOT EXISTS agents (
     traits_json TEXT NOT NULL,
     skills_json TEXT NOT NULL,
     tradition_ids_json TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'CITIZEN',
+    title TEXT,
+    yaw REAL NOT NULL DEFAULT 0.0,
+    profession TEXT NOT NULL DEFAULT 'CITIZEN',
+    profession_level INTEGER NOT NULL DEFAULT 1,
+    profession_xp REAL NOT NULL DEFAULT 0.0,
+    hygiene REAL NOT NULL DEFAULT 1.0,
+    fatigue REAL NOT NULL DEFAULT 0.0,
+    distress_reason TEXT,
+    inventory_json TEXT NOT NULL DEFAULT '[]',
+    equipped_gear_json TEXT NOT NULL DEFAULT '[]',
+    known_book_ids_json TEXT NOT NULL DEFAULT '[]',
+    personality_traits_json TEXT NOT NULL DEFAULT '{}',
+    mood_state TEXT NOT NULL DEFAULT 'calm',
+    active_effects_json TEXT NOT NULL DEFAULT '{}',
     updated_tick INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS buildings (
+    building_id TEXT PRIMARY KEY,
+    city_id TEXT,
+    building_type TEXT NOT NULL,
+    racial_style TEXT NOT NULL,
+    pos_x REAL NOT NULL,
+    pos_y REAL NOT NULL,
+    pos_z REAL NOT NULL,
+    rotation_y REAL NOT NULL,
+    parcel_x INTEGER NOT NULL,
+    parcel_z INTEGER NOT NULL,
+    owner_id TEXT,
+    owner_name TEXT,
+    for_sale INTEGER NOT NULL DEFAULT 0,
+    sale_price REAL NOT NULL DEFAULT 0.0,
+    is_frontier INTEGER NOT NULL DEFAULT 0,
+    created_day INTEGER NOT NULL DEFAULT 0,
+    updated_day INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS relationships (
@@ -818,6 +853,7 @@ CREATE TABLE IF NOT EXISTS world_library (
     topic TEXT NOT NULL,
     title TEXT NOT NULL,
     summary TEXT NOT NULL,
+    body TEXT,
     author_id TEXT NOT NULL,
     author_proficiency REAL NOT NULL,
     skill_bonus REAL NOT NULL,

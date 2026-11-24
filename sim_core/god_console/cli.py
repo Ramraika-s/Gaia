@@ -12,7 +12,7 @@ from __future__ import annotations
 import io
 import shlex
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import psutil
 from rich.console import Console
@@ -203,7 +203,7 @@ class RichGodConsole:
         cpi = self.engine.wtc.cpi
         try:
             mem_pct = psutil.virtual_memory().percent
-        except Exception:
+        except (OSError, RuntimeError):
             mem_pct = 0.0
 
         table = Table(title="Civilization Status", border_style="gold3")
@@ -356,12 +356,19 @@ class RichGodConsole:
         table.add_column("Next Election Day", justify="right")
 
         for p in self.engine.political_engine.polities.values():
+            net = getattr(p, "next_election_tick", None)
+            if net is not None:
+                from sim_core.config import TICKS_PER_GAME_DAY
+                elec_day = (net // TICKS_PER_GAME_DAY) + 1
+                elec_str = f"Day {elec_day}"
+            else:
+                elec_str = "N/A"
             table.add_row(
                 p.settlement_id,
                 p.name,
                 p.leader_id or "NONE",
                 p.regime_type,
-                "N/A",
+                elec_str,
             )
 
         return self._render_table_to_str(table)
@@ -378,16 +385,17 @@ class RichGodConsole:
         table.add_column("Patron Deity")
         table.add_column("Pope ID")
         table.add_column("Tithe Rate", justify="right")
-        table.add_column("Altars", justify="right")
+        table.add_column("Canonized", justify="right")
 
         for r in religions:
+            tithe = r.tenets.get("charity_tithe_rate", 0.05) if hasattr(r, "tenets") else 0.05
             table.add_row(
                 r.religion_id,
                 r.name,
-                r.patron_deity_slot or "WORLD_GODDESS",
+                getattr(r, "aligned_deity_slot", "world_goddess").upper(),
                 r.pope_id or "NONE",
-                f"{r.tithe_rate * 100:.1f}%",
-                str(len(r.altar_parcel_ids)),
+                f"{tithe * 100:.1f}%",
+                str(len(getattr(r, "canonized_entry_ids", []))),
             )
 
         return self._render_table_to_str(table)
@@ -616,7 +624,21 @@ class RichGodConsole:
             decree_id = args[1]
             text = args[2]
             param_key = args[3] if len(args) > 3 else None
-            param_val = float(args[4]) if len(args) > 4 else None
+            param_val: Any = None
+            if len(args) > 4:
+                raw_val = args[4]
+                if raw_val.lower() == "true":
+                    param_val = True
+                elif raw_val.lower() == "false":
+                    param_val = False
+                else:
+                    try:
+                        param_val = int(raw_val)
+                    except ValueError:
+                        try:
+                            param_val = float(raw_val)
+                        except ValueError:
+                            param_val = raw_val
             prop = CommitProposal(
                 proposal_id=f"prop_{uuid.uuid4().hex[:8]}",
                 tick=self.engine.current_tick,
@@ -898,8 +920,13 @@ class RichGodConsole:
         if not ag:
             return f"Agent '{agent_id}' not found."
 
-        ag.alive = False
-        self.engine.adapter.despawn_agent(agent_id, ag.slot_idx, reason="DIVINE_SMITE")
+        if not ag.alive:
+            return f"Agent '{agent_id}' is already deceased."
+
+        despawned = self.engine.despawn_agent(agent_id, reason="DIVINE_SMITE")
+        if not despawned:
+            return f"Failed to despawn agent '{agent_id}'."
+
         fatality = FatalityRecord(
             agent_id=ag.agent_id,
             display_name=ag.display_name,
@@ -956,7 +983,12 @@ class RichGodConsole:
             return "Usage: wtc freeze | wtc tariff <polity_id> <rate>"
         sub = args[0].lower()
         if sub == "freeze":
-            return "WTC market freeze toggled."
+            if self.engine.wtc.frozen:
+                self.engine.wtc.unfreeze_market()
+                return "WTC market unfrozen."
+            else:
+                self.engine.wtc.freeze_market()
+                return "WTC market frozen."
         elif sub == "tariff" and len(args) >= 3:
             polity_id = args[1]
             try:
@@ -1044,8 +1076,8 @@ class RichGodConsole:
         return f"{msg} (Day {self.engine.current_day})."
 
     def _cmd_save(self) -> str:
-        """Triggers atomic World Goddess end-of-day 2PC save."""
-        manifest = self.engine.commit_end_of_day()
+        """Triggers atomic World Goddess end-of-day 2PC save without advancing calendar day."""
+        manifest = self.engine.commit_end_of_day(advance_day=False)
         return (
             f"Atomic save committed successfully.\n"
             f"Day: {manifest.day} | Checkpoint: {manifest.db_sha256[:12]}... "
@@ -1053,10 +1085,16 @@ class RichGodConsole:
         )
 
     def _cmd_rewind(self, args: list[str]) -> str:
-        """Rewinds world to last verified snapshot: rewind."""
+        """Rewinds world to last verified snapshot or target day: rewind [day]."""
+        target_day: int | None = None
+        if args:
+            try:
+                target_day = int(args[0])
+            except ValueError:
+                return f"Invalid day argument for rewind: {args[0]}. Expected integer."
         try:
-            day, manifest, alert_msg = self.engine.checkpoint_mgr.restore_or_rewind_on_boot(
-                live_db_path=self.engine.db_path
+            day, manifest, alert_msg = self.engine.restore_from_checkpoint(
+                target_day=target_day
             )
             return (
                 f"{alert_msg}\n"

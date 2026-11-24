@@ -79,14 +79,51 @@ func _connect_bridge_signals() -> void:
 var is_near_lectern: bool = false
 
 
+func is_modal_open() -> bool:
+	return visible
+
+
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		var key_ev: InputEventKey = event as InputEventKey
+		var is_esc: bool = (key_ev.keycode == KEY_ESCAPE or key_ev.physical_keycode == KEY_ESCAPE)
+		if is_esc:
+			var focused: Control = get_viewport().gui_get_focus_owner()
+			if focused:
+				focused.release_focus()
+			close_modal()
+			get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_L:
-			toggle_modal()
-		elif event.keycode == KEY_E and is_near_lectern and not visible:
-			open_modal(0)
-		elif event.keycode == KEY_ESCAPE and visible:
+		var key_ev: InputEventKey = event as InputEventKey
+		var is_esc: bool = (key_ev.keycode == KEY_ESCAPE or key_ev.physical_keycode == KEY_ESCAPE)
+		if is_esc and visible:
+			var focused: Control = get_viewport().gui_get_focus_owner()
+			if focused:
+				focused.release_focus()
 			close_modal()
+			get_viewport().set_input_as_handled()
+			return
+
+		if UiStateManager.instance and UiStateManager.instance.is_text_input_focused():
+			return
+
+		var is_l: bool = (key_ev.keycode == KEY_L or key_ev.physical_keycode == KEY_L)
+		var is_e: bool = (key_ev.keycode == KEY_E or key_ev.physical_keycode == KEY_E)
+
+		if is_l:
+			if not visible and UiStateManager.instance and UiStateManager.instance.is_blocking_modal_open():
+				return
+			toggle_modal()
+			get_viewport().set_input_as_handled()
+		elif is_e and is_near_lectern and not visible:
+			if not (UiStateManager.instance and UiStateManager.instance.is_blocking_modal_open()):
+				open_modal(0)
+				get_viewport().set_input_as_handled()
 
 
 func set_near_lectern(near: bool) -> void:
@@ -107,6 +144,11 @@ func open_modal(tab_idx: int = 0) -> void:
 
 func close_modal() -> void:
 	visible = false
+	var vp: Viewport = get_viewport()
+	if vp:
+		var fo: Control = vp.gui_get_focus_owner()
+		if fo and is_ancestor_of(fo):
+			fo.release_focus()
 	modal_closed.emit()
 
 
@@ -171,14 +213,15 @@ func _on_library_commit_pressed() -> void:
 	var body: String = lib_input_content.text.strip_edges()
 
 	if topic == "" or title == "" or body == "":
+		show_toast("⚠ All fields (Topic, Title, Body) are required.", false)
 		return
 
 	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
-	if bridge:
-		bridge.send_god_library_edit(topic, title, body, "GOD")
-		lib_input_topic.text = ""
-		lib_input_title.text = ""
-		lib_input_content.text = ""
+	if not bridge or not bridge.is_bridge_connected():
+		show_toast("⚠ Cannot commit: WebSocket Bridge disconnected.", false)
+		return
+
+	bridge.send_god_library_edit(topic, title, body, "GOD")
 
 
 func _setup_toast_ui() -> void:
@@ -244,6 +287,9 @@ func _on_library_edit_response(data: Dictionary) -> void:
 	var title: String = data.get("title", data.get("topic", "Volume"))
 	if status == "SUCCESS":
 		show_toast("✦ Canonical Volume '%s' inscribed into World Library! ✦" % title, true)
+		lib_input_topic.text = ""
+		lib_input_title.text = ""
+		lib_input_content.text = ""
 	else:
 		show_toast("⚠ Inscription Failed: %s" % reason, false)
 
@@ -317,6 +363,19 @@ func _on_codex_reject_pressed() -> void:
 		codex_approval_hbox.visible = false
 
 
+func _parse_param_value(val_str: String) -> Variant:
+	var lower: String = val_str.to_lower()
+	if lower == "true":
+		return true
+	elif lower == "false":
+		return false
+	elif val_str.is_valid_int():
+		return val_str.to_int()
+	elif val_str.is_valid_float():
+		return val_str.to_float()
+	return val_str
+
+
 func _on_codex_promulgate_pressed() -> void:
 	var did: String = codex_input_decree_id.text.strip_edges()
 	var body: String = codex_input_decree_text.text.strip_edges()
@@ -324,19 +383,19 @@ func _on_codex_promulgate_pressed() -> void:
 	var pval_raw: String = codex_input_param_val.text.strip_edges()
 
 	if did == "" or body == "":
+		show_toast("⚠ Decree ID and Decree Body are required.", false)
+		return
+
+	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
+	if not bridge or not bridge.is_bridge_connected():
+		show_toast("⚠ Cannot promulgate: WebSocket Bridge disconnected.", false)
 		return
 
 	var pval: Variant = null
 	if pval_raw != "":
-		pval = pval_raw.to_float() if pval_raw.is_valid_float() else pval_raw
+		pval = _parse_param_value(pval_raw)
 
-	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
-	if bridge:
-		bridge.send_god_codex_edit(did, body, pkey, pval)
-		codex_input_decree_id.text = ""
-		codex_input_decree_text.text = ""
-		codex_input_param_key.text = ""
-		codex_input_param_val.text = ""
+	bridge.send_god_codex_edit(did, body, pkey, pval)
 
 
 func _on_codex_approve_response(data: Dictionary) -> void:
@@ -371,6 +430,10 @@ func _on_codex_edit_response(data: Dictionary) -> void:
 	var did: String = data.get("decree_id", "Decree")
 	if status == "SUCCESS":
 		show_toast("⚡ Divine Decree '%s' promulgated to Codex! ⚡" % did, true)
+		codex_input_decree_id.text = ""
+		codex_input_decree_text.text = ""
+		codex_input_param_key.text = ""
+		codex_input_param_val.text = ""
 	else:
 		show_toast("⚠ Decree Failed: %s" % reason, false)
 

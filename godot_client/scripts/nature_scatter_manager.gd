@@ -177,8 +177,8 @@ func _scatter_cluster(
 			if in_city:
 				continue
 
-			# 3. Ring Road exclusion (within 16m of r = 1150m)
-			if abs(r_origin - 1150.0) < 16.0:
+			# 3. Ring Road & Highway exclusion
+			if abs(r_origin - 1150.0) < 16.0 or TerrainHeightSampler.get_road_weight(pos_2d.x, pos_2d.y) > 0.15:
 				continue
 
 			# 4. Elevation & Ocean exclusion (strictly zero props on beaches/ocean y < 4.0m)

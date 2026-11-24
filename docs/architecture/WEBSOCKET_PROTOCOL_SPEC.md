@@ -48,7 +48,7 @@ Emitted immediately upon client connection:
 {
   "type": "HANDSHAKE_ACK",
   "status": "CONNECTED",
-  "protocol_version": "4.0",
+  "protocol_version": "4.0.0",
   "world_size": 8000.0,
   "sea_level": 0.0,
   "server_day": 14,
@@ -339,7 +339,7 @@ Direct administration of the Divine Codex and live engine parameter overrides:
 ```
 
 ### 4.7 `GOD_COMMAND`
-Executes God Console commands directly from the Godot in-game terminal:
+Executes God Console commands directly from the Godot in-game terminal or UI modals (e.g., `speed`, `bless`, `curse`, `rewind`, `freeze_wtc`):
 ```json
 {
   "type": "GOD_COMMAND",
@@ -347,12 +347,20 @@ Executes God Console commands directly from the Godot in-game terminal:
   "args": ["5.0"]
 }
 ```
+Or applying divine intervention directly from `EntityInspector`:
+```json
+{
+  "type": "GOD_COMMAND",
+  "command": "curse",
+  "args": ["agt_01h8x", "SLOTH"]
+}
+```
 Response:
 ```json
 {
   "type": "GOD_COMMAND_RESULT",
-  "command": "speed",
+  "command": "curse",
   "status": "SUCCESS",
-  "message": "Simulation speed set to 5.0x."
+  "message": "Cursed agt_01h8x with SLOTH."
 }
 ```

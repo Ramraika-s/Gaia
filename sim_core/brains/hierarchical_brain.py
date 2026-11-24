@@ -23,7 +23,10 @@ from sim_core.brains.personality import (
     MoodState,
     PersonalityVector,
 )
-from sim_core.brains.profession_nets import ProfessionNetRegistry
+from sim_core.brains.profession_nets import (
+    EFFECT_KEY_TO_CHANNEL,
+    ProfessionNetRegistry,
+)
 from sim_core.brains.shared_living_net import SharedLivingNet
 from sim_core.config import SLAB_SIZE
 from sim_core.neural.batched_self_net import BatchedAgentSelfNet
@@ -150,10 +153,11 @@ class HierarchicalBrain(nn.Module):
             if eff:
                 has_effects = True
                 for k, v in eff.items():
-                    col = EFFECT_KEY_MAP.get(k)
-                    if col is not None:
-                        eff_mat[i, col] = v
+                    ch = EFFECT_KEY_TO_CHANNEL.get(k)
+                    if ch is not None:
+                        eff_mat[i, ch] += float(v)
         if has_effects:
+            np.clip(eff_mat, -1.0, 1.0, out=eff_mat)
             x_prof[:, 22:28] = torch.from_numpy(eff_mat).to(self.device)
 
         # Group agent indices by profession for efficient sub-batching
@@ -258,7 +262,9 @@ class HierarchicalBrain(nn.Module):
         if N == 0:
             return torch.empty((0, 20), device=self.device), torch.empty((0, 1), device=self.device)
 
-        slot_indices = [getattr(a, "slot_idx", 0) for a in agents]
+        slot_indices = [
+            s if s is not None else 0 for s in (getattr(a, "slot_idx", 0) for a in agents)
+        ]
         x_living = torch.zeros((N, 24), dtype=torch.float32, device=self.device)
         for i, a in enumerate(agents):
             x_living[i, 0] = a.health / max(1.0, getattr(a, "max_health", 40.0))

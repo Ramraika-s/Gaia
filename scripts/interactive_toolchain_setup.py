@@ -135,7 +135,7 @@ ASSETS_SPEC = {
         "required_in": "Phase 5 (Slice B)",
     },
     "kenney_audio": {
-        "name": "Kenney - Audio Packs (RPG / Impact / UI / Voice)",
+        "name": "Kenney - Audio Packs (RPG / Impact / UI)",
         "target_path": "godot_client/assets/audio/rpg",
         "official_url": "https://kenney.nl/assets/category:Audio",
         "license": "CC0 (Public Domain)",

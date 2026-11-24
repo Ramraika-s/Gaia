@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import json
 import math
+import zlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sim_core.config import TICKS_PER_GAME_DAY
 from sim_core.schemas import AgentRecord, Season, Vec3
+from sim_core.society.religion import get_agent_devotion
 
 if TYPE_CHECKING:
     from sim_core.spatial.hash_grid import SpatialHashGrid
@@ -142,6 +144,7 @@ class NavigationEngine:
         self.curtain_walls: list[CurtainWallObstacle] = []
         self.road_nodes: dict[str, Vec3] = {}
         self.road_edges: dict[str, list[str]] = {}
+        self._agent_path_cache: dict[str, tuple[tuple[float, float], list[Vec3]]] = {}
 
         self._load_road_network()
         self._register_default_landmarks()
@@ -153,7 +156,7 @@ class NavigationEngine:
             try:
                 with open(ROADS_JSON_PATH, encoding="utf-8") as f:
                     data = json.load(f)
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 data = {}
 
         # 1. Central Acropolis Hub
@@ -224,6 +227,13 @@ class NavigationEngine:
     def _add_edge(self, node_a: str, node_b: str) -> None:
         self.road_edges.setdefault(node_a, []).append(node_b)
         self.road_edges.setdefault(node_b, []).append(node_a)
+
+    def reset_to_default_landmarks(self) -> None:
+        """Clears dynamic building footprints and restores permanent landmarks."""
+        self.footprints.clear()
+        self.curtain_walls.clear()
+        self._agent_path_cache.clear()
+        self._register_default_landmarks()
 
     def _register_default_landmarks(self) -> None:
         """Registers default footprints for palaces, institutions, and city walls."""
@@ -312,10 +322,145 @@ class NavigationEngine:
         door_z: float,
         building_type: str = "BUILDING",
     ) -> None:
-        """Dynamically registers modular seed buildings or player structures."""
+        """Dynamically registers or updates modular seed buildings or player structures."""
+        for fp in self.footprints:
+            if fp.name == name:
+                fp.cx = cx
+                fp.cz = cz
+                fp.radius = radius
+                fp.door_x = door_x
+                fp.door_z = door_z
+                fp.building_type = building_type
+                return
         self.footprints.append(
             BuildingFootprint(name, cx, cz, radius, door_x, door_z, building_type)
         )
+
+    def get_building_door_pos(
+        self,
+        building_id: str,
+        fallback_bld: Any = None,
+    ) -> Vec3 | None:
+        """
+        Returns the door entrance coordinate outside the building's footprint radius.
+        Looks up registered BuildingFootprint by building_id, or calculates from fallback_bld.
+        """
+        for fp in self.footprints:
+            if fp.name == building_id:
+                elev = getattr(fallback_bld, "y", 0.0) if fallback_bld else 0.0
+                dx = fp.door_x - fp.cx
+                dz = fp.door_z - fp.cz
+                d = math.hypot(dx, dz)
+                min_door_dist = fp.radius + 1.5
+                if d < min_door_dist:
+                    scale = min_door_dist / (d if d > 1e-4 else 1.0)
+                    door_x = fp.cx + (dx * scale if d > 1e-4 else min_door_dist)
+                    door_z = fp.cz + (dz * scale if d > 1e-4 else 0.0)
+                else:
+                    door_x = fp.door_x
+                    door_z = fp.door_z
+                return Vec3(x=round(door_x, 2), y=round(elev, 2), z=round(door_z, 2))
+
+        if fallback_bld is not None:
+            bx = getattr(fallback_bld, "x", 0.0)
+            by = getattr(fallback_bld, "y", 0.0)
+            bz = getattr(fallback_bld, "z", 0.0)
+            radius = getattr(fallback_bld, "footprint_radius", 10.0)
+            rot_y = getattr(fallback_bld, "rotation_y", 0.0)
+            door_dist = radius + 1.5
+            door_x = bx + door_dist * math.sin(rot_y)
+            door_z = bz + door_dist * math.cos(rot_y)
+            return Vec3(x=round(door_x, 2), y=round(by, 2), z=round(door_z, 2))
+
+        return None
+
+    def clear_agent_cache(self, agent_id: str) -> None:
+        """Evicts cached pathfinding waypoints for despawned or deceased agents."""
+        self._agent_path_cache.pop(agent_id, None)
+
+    def _segment_crosses_wall(self, p1: Vec3, p2: Vec3, wall: CurtainWallObstacle) -> Vec3 | None:
+        """Checks if a direct line segment between p1 and p2 crosses an impassable curtain wall."""
+        d1 = math.hypot(p1.x - wall.cx, p1.z - wall.cz)
+        d2 = math.hypot(p2.x - wall.cx, p2.z - wall.cz)
+        r_inner = wall.radius - wall.wall_thickness * 0.5
+        r_outer = wall.radius + wall.wall_thickness * 0.5
+        crosses = (
+            (d1 < r_inner and d2 > r_inner)
+            or (d1 > r_outer and d2 < r_outer)
+            or (d1 < wall.radius and d2 > wall.radius)
+            or (d1 > wall.radius and d2 < wall.radius)
+        )
+        if not crosses:
+            return None
+
+        # Check if the straight path passes through a gate opening
+        is_blocked = False
+        for step_i in range(1, 6):
+            t = step_i / 6.0
+            sx = p1.x + t * (p2.x - p1.x)
+            sz = p1.z + t * (p2.z - p1.z)
+            if wall.is_blocked(sx, sz):
+                is_blocked = True
+                break
+
+        if not is_blocked:
+            return None
+
+        # Blocked: route via the nearest gate on this wall
+        ang_p1 = math.atan2(p1.z - wall.cz, p1.x - wall.cx)
+        best_gate_ang = min(
+            wall.gate_angles,
+            key=lambda ga: abs((ang_p1 - ga + math.pi) % (2.0 * math.pi) - math.pi),
+        )
+        gate_r = wall.radius + 2.0 if d1 > wall.radius else wall.radius - 2.0
+        gx = wall.cx + gate_r * math.cos(best_gate_ang)
+        gz = wall.cz + gate_r * math.sin(best_gate_ang)
+        return Vec3(x=round(gx, 2), y=p1.y, z=round(gz, 2))
+
+    def get_next_waypoint(
+        self,
+        agent_id: str,
+        current_pos: Vec3,
+        dest_pos: Vec3,
+    ) -> Vec3:
+        """
+        Retrieves next intermediate waypoint along road network if dest is > 45m away,
+        caching waypoint paths per agent.
+        """
+        dist = math.hypot(dest_pos.x - current_pos.x, dest_pos.z - current_pos.z)
+        if dist <= 45.0:
+            for wall in self.curtain_walls:
+                gate_wp = self._segment_crosses_wall(current_pos, dest_pos, wall)
+                if gate_wp is not None:
+                    if math.hypot(gate_wp.x - current_pos.x, gate_wp.z - current_pos.z) > 3.0:
+                        return gate_wp
+            self._agent_path_cache.pop(agent_id, None)
+            return dest_pos
+
+        dest_key = (round(dest_pos.x, 1), round(dest_pos.z, 1))
+        cached = self._agent_path_cache.get(agent_id)
+        if cached is not None and cached[0] == dest_key and cached[1]:
+            waypoints = cached[1]
+            while (
+                waypoints
+                and math.hypot(current_pos.x - waypoints[0].x, current_pos.z - waypoints[0].z) < 4.0
+            ):
+                waypoints.pop(0)
+            if waypoints:
+                return waypoints[0]
+
+        new_path = self.find_path(current_pos, dest_pos)
+        while (
+            new_path
+            and math.hypot(current_pos.x - new_path[0].x, current_pos.z - new_path[0].z) < 4.0
+        ):
+            new_path.pop(0)
+
+        if not new_path:
+            return dest_pos
+
+        self._agent_path_cache[agent_id] = (dest_key, new_path)
+        return new_path[0]
 
     # -------------------------------------------------------------------------
     # Pathfinding & Waypoint Routing
@@ -382,6 +527,7 @@ class NavigationEngine:
         target_z: float,
         speed: float = 2.0,
         dt: float = 0.5,
+        allow_palace_interior: bool = False,
     ) -> tuple[float, float, float]:
         """
         Calculates safe next step toward (target_x, target_z), avoiding building
@@ -395,13 +541,17 @@ class NavigationEngine:
         if dist < 1e-4:
             return current_x, current_z, 0.0
 
-        yaw = math.atan2(dx, dz)
+        yaw = math.atan2(-dx, -dz)
         step = min(dist, speed * dt)
         step_x = current_x + (dx / dist) * step
         step_z = current_z + (dz / dist) * step
 
         # 1. Resolve Building Footprints
         for fp in self.footprints:
+            if allow_palace_interior and (
+                fp.building_type in ("PALACE", "GODMOTHER_PALACE") or "palace" in fp.name.lower()
+            ):
+                continue
             if fp.is_inside(step_x, step_z):
                 step_x, step_z = fp.resolve_collision(step_x, step_z)
 
@@ -417,8 +567,14 @@ class NavigationEngine:
                     # Push back toward previous valid coordinate
                     step_x = current_x
                     step_z = current_z
-            except Exception:
-                pass
+            except (AttributeError, TypeError, IndexError):
+                step_x = current_x
+                step_z = current_z
+
+        actual_dx = step_x - current_x
+        actual_dz = step_z - current_z
+        if math.hypot(actual_dx, actual_dz) > 1e-4:
+            yaw = math.atan2(-actual_dx, -actual_dz)
 
         return round(step_x, 3), round(step_z, 3), round(yaw, 4)
 
@@ -498,13 +654,13 @@ class NavigationEngine:
         # Calculate time of day (0..24h) with deterministic agent jitter (+/- 20 mins)
         tick_in_day = tick % TICKS_PER_GAME_DAY
         base_hour = (tick_in_day / float(TICKS_PER_GAME_DAY)) * 24.0
-        hash_val = hash(agent.agent_id) % 100
+        hash_val = zlib.crc32(agent.agent_id.encode("utf-8")) % 100
         jitter_hours = (hash_val - 50) * 0.007  # +/- 0.35 hours (~20 mins)
         hour = (base_hour + jitter_hours) % 24.0
 
         # Interrupt 1: Inclement Weather (RAIN, STORM, SNOW, ASH -> seek shelter)
         if weather in ("RAIN", "STORM", "SNOW", "ASH"):
-            shelter_target = home_pos or self.road_nodes.get("acropolis_gate")
+            shelter_target = home_pos or work_pos or agent.pos
             return "SHELTERING", shelter_target
 
         # Interrupt 2: Distressed / Crying Infant Interrupt
@@ -583,8 +739,8 @@ class NavigationEngine:
 
             if d_sq <= r_sq:
                 dist = math.sqrt(max(1e-4, d_sq))
-                # 1. Turn to face God Avatar
-                agent.yaw = round(math.atan2(dx, dz), 4)
+                # 1. Turn to face God Avatar (-Z forward convention)
+                agent.yaw = round(math.atan2(-dx, -dz), 4)
 
                 # 2. Smoothly step aside to clear personal path (min 1.2m radius)
                 if dist < 1.4:
@@ -593,7 +749,7 @@ class NavigationEngine:
                     agent.pos.z -= (dz / dist) * push_away
 
                 # 3. Attitude response
-                devotion = agent.personality.devotion if agent.personality else 0.5
+                devotion = get_agent_devotion(agent)
                 trust = agent.personality.out_group_trust if agent.personality else 0.5
 
                 if devotion >= 0.55:

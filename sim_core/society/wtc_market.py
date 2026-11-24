@@ -46,6 +46,15 @@ class WTCExchange:
         self.bids: dict[str, list[dict[str, Any]]] = {c: [] for c in COMMODITIES}
         self.asks: dict[str, list[dict[str, Any]]] = {c: [] for c in COMMODITIES}
 
+    def calibrate_baseline(self, initial_m: float, initial_q: float) -> None:
+        """Anchors baseline macro aggregates M0, Q0 and resets CPI to 1.000."""
+        self.base_m = max(1.0, initial_m)
+        self.base_q = max(0.1, initial_q)
+        self.current_m = self.base_m
+        self.current_q = self.base_q
+        self.cpi = 1.0
+        self.current_prices = dict(BASE_PRICES)
+
     def update_macro_aggregates(self, money_supply_m: float, real_output_q: float) -> float:
         """
         Updates circulating money supply M and real output Q,
@@ -156,6 +165,11 @@ class WTCExchange:
         )
         self.history.append(snapshot)
         return snapshot
+
+    @staticmethod
+    def estimate_real_output_q(living_agent_count: int) -> float:
+        """Single source of truth for estimated real output aggregate Q."""
+        return max(10.0, float(living_agent_count) * 5.0)
 
     def freeze_market(self) -> None:
         """God/Admin market freeze."""

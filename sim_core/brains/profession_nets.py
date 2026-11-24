@@ -11,6 +11,7 @@ Applies unlocked world_library mechanical_effects strictly from books the agent 
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
 from typing import Any
 
 import torch
@@ -31,6 +32,96 @@ PROFESSIONS = [
     "HUNTER",
     "CITIZEN",
 ]
+
+# Canonical mechanical effect key sets mapped to 6 profession feature channels
+CHANNEL_0_KEYS: frozenset[str] = frozenset(
+    {
+        "defense",
+        "defense_bonus",
+        "combat_power_multiplier",
+        "patrol_efficiency",
+        "structural_integrity_bonus",
+    }
+)
+CHANNEL_1_KEYS: frozenset[str] = frozenset(
+    {
+        "yield_mult",
+        "craft_speed_bonus",
+        "smelting_yield_bonus",
+        "tool_durability_bonus",
+        "crop_yield_bonus",
+        "spoilage_reduction",
+        "construction_cost_reduction",
+    }
+)
+CHANNEL_2_KEYS: frozenset[str] = frozenset(
+    {
+        "trade_margin",
+        "trade_fee_reduction",
+        "market_clearing_efficiency",
+        "credit_default_reduction",
+    }
+)
+CHANNEL_3_KEYS: frozenset[str] = frozenset(
+    {"research_rate", "judicial_accuracy", "civil_stability_bonus", "reputation_bonus"}
+)
+CHANNEL_4_KEYS: frozenset[str] = frozenset(
+    {"faith_gain", "faith_devotion_bonus", "divine_favor_generation"}
+)
+CHANNEL_5_KEYS: frozenset[str] = frozenset(
+    {
+        "stamina_efficiency",
+        "winter_hardiness",
+        "healing_rate_bonus",
+        "infection_resistance",
+        "fertility_rate_bonus",
+        "attrition_reduction",
+    }
+)
+
+# Flat O(1) key-to-channel mapping for fast vectorized feature aggregation
+EFFECT_KEY_TO_CHANNEL: dict[str, int] = {}
+for _k in CHANNEL_0_KEYS:
+    EFFECT_KEY_TO_CHANNEL[_k] = 0
+for _k in CHANNEL_1_KEYS:
+    EFFECT_KEY_TO_CHANNEL[_k] = 1
+for _k in CHANNEL_2_KEYS:
+    EFFECT_KEY_TO_CHANNEL[_k] = 2
+for _k in CHANNEL_3_KEYS:
+    EFFECT_KEY_TO_CHANNEL[_k] = 3
+for _k in CHANNEL_4_KEYS:
+    EFFECT_KEY_TO_CHANNEL[_k] = 4
+for _k in CHANNEL_5_KEYS:
+    EFFECT_KEY_TO_CHANNEL[_k] = 5
+
+
+def aggregate_effect_channels(
+    active_effects: dict[str, float] | Mapping[str, float],
+) -> tuple[float, float, float, float, float, float]:
+    """
+    Aggregates active mechanical effect bonuses into 6 normalized channels in [-1.0, 1.0].
+    Maps legacy short keys and all canonical MECHANICAL_EFFECT_BOUNDS keys:
+      Channel 0: defense
+      Channel 1: yield_mult
+      Channel 2: trade_margin
+      Channel 3: research_rate
+      Channel 4: faith_gain
+      Channel 5: stamina_efficiency
+    """
+    ch = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    for k, v in active_effects.items():
+        idx = EFFECT_KEY_TO_CHANNEL.get(k)
+        if idx is not None:
+            ch[idx] += v
+
+    return (
+        max(-1.0, min(1.0, ch[0])),
+        max(-1.0, min(1.0, ch[1])),
+        max(-1.0, min(1.0, ch[2])),
+        max(-1.0, min(1.0, ch[3])),
+        max(-1.0, min(1.0, ch[4])),
+        max(-1.0, min(1.0, ch[5])),
+    )
 
 
 class ProfessionNet(nn.Module):
@@ -147,13 +238,13 @@ class ProfessionNetRegistry:
             feats.append(0.0)
 
         # Slots 20..27:
-        eff = active_mechanical_effects
+        c0, c1, c2, c3, c4, c5 = aggregate_effect_channels(active_mechanical_effects)
         feats.append(float(level) / 10.0)  # Slot 20: level
         feats.append(min(1.0, xp / 1000.0))  # Slot 21: normalized XP
-        feats.append(eff.get("defense", 0.0))  # Slot 22: defense buff
-        feats.append(eff.get("yield_mult", 0.0))  # Slot 23: harvest/craft buff
-        feats.append(eff.get("trade_margin", 0.0))  # Slot 24: commerce buff
-        feats.append(eff.get("research_rate", 0.0))  # Slot 25: scholarship buff
-        feats.append(eff.get("faith_gain", 0.0))  # Slot 26: devotion buff
-        feats.append(eff.get("stamina_efficiency", 0.0))  # Slot 27: endurance buff
+        feats.append(c0)  # Slot 22: defense buff
+        feats.append(c1)  # Slot 23: harvest/craft buff
+        feats.append(c2)  # Slot 24: commerce buff
+        feats.append(c3)  # Slot 25: scholarship buff
+        feats.append(c4)  # Slot 26: devotion buff
+        feats.append(c5)  # Slot 27: endurance buff
         return feats

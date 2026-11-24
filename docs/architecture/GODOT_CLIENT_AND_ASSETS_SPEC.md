@@ -3,7 +3,7 @@
 ## 1. Visual Direction & Radeon 780M Performance Budget
 The 3D client is built in **Godot 4.7.2 (Vulkan on Fedora Linux 45 / Wayland)** and tuned specifically for the **AMD Radeon 780M iGPU** inside the HP EliteBook 845 G11 (32 GB DDR5 RAM).
 
-- **Visual Style:** **Stylized Anime-Fantasy Hybrid.** Bespoke anime deities created in **VRoid Studio** (via Steam/Proton) share the world with stylized low-poly mortals, creatures, and walk-in architecture from **Quaternius** and **KayKit** (all CC0). A unified lightweight Godot toon/cel-shading spatial shader (`stylized_toon_season.gdshader`) ensures deities and mortals visually belong to the same world.
+- **Visual Style:** **Stylized Anime-Fantasy Hybrid.** Bespoke anime deities created in **VRoid Studio** (via Steam/Proton) share the world with stylized low-poly mortals, creatures, and walk-in architecture from **Quaternius** and **KayKit** (all CC0). Built-in anime **VRM MToon Shader v2.6.1** shading and custom spatial shaders (`shaders/emissive_window.gdshader`, `shaders/far_building_proxy.gdshader`, `shaders/lantern_light_pool.gdshader`) ensure deities and mortals visually belong to the same world.
 - **Renderer Defaults:**
   - **Standard Mode:** Godot **Forward+** renderer, **MSAA 2x**, **Shadow Atlas `2048px`**, SDFGI disabled (using lightweight Baked/Dynamic DirectionalLight + ambient sky light).
   - **High-Density Mode:** Switch to Godot **Mobile** renderer if targeting locked `60 FPS` with `150+` simultaneously visible rigged agents.
@@ -41,8 +41,8 @@ The 3D client is built in **Godot 4.7.2 (Vulkan on Fedora Linux 45 / Wayland)** 
    - Stylized water surface at `SEA_LEVEL = 0.0m` featuring two-tone depth coloring, shoreline foam contouring, and subtle vertex wave undulations.
 3. **`shaders/grass_sway.gdshader`:**
    - Wind sway vertex shader applied to all 3D grass mesh instances driven by wind speed and wind strength uniforms.
-4. **`shaders/stylized_toon_season.gdshader`:**
-   - Global cel/toon spatial shader with a global `season_progress` uniform (`0.0` Spring $\rightarrow$ `1.0` Summer $\rightarrow$ `2.0` Autumn $\rightarrow$ `3.0` Winter frost) dynamically tinting foliage and terrain.
+4. **`shaders/emissive_window.gdshader`:**
+   - Nocturnal window illumination shader with smooth `night_factor` interpolation (`night_factor > 0.3`), dynamically brightening indoor windows and lanterns at night.
 
 ---
 
@@ -66,7 +66,7 @@ The world is an **`8,000m × 8,000m`** (`-4000..4000m`, `1024×1024`) concentric
 │                                                                                  │
 │         Ring 0: Imperial Acropolis (r = 0 .. 340m)                               │
 │                 - 32m Palace Plateau: Grand Divine Palace & Twin Dragons         │
-│                 - 24m Plaza: World Library, WTC, Courthouse, Cathedral, Sanctum  │
+│                 - 24m Plaza: World Library, WTC, Courthouse, Grand Cathedral     │
 │                                                                                  │
 [-4000, -4000] ──────────────────────────────────────────────────────── [4000, -4000]
 ```
@@ -99,7 +99,7 @@ To maintain high visual fidelity on the Radeon 780M without lagging:
   - **World Trade Centre (`wtc_market.tscn`):** Walk-in trading hall with dynamic 3D hanging price and CPI boards.
   - **High Courthouse (`courthouse.tscn`):** Judicial hall with live criminal docket boards.
   - **Grand Cathedral (`grand_cathedral.tscn`):** Multi-faith sanctuary projecting `AltarPrayerBeacon` light pillars.
-  - **World Goddess Sanctum (`world_goddess_sanctum.tscn`):** Circular celestial temple at `(0, 24, 210)`.
+  - *(The Grand Divine Palace serves as the cosmic sanctuary for the World Goddess and God Avatar atop the 32m plateau).*
 
 ### 5.2 Ring 1 Pentagonal Cities & Modular Buildings
 - All 5 cities are situated at `r = 1,150m` with `72°` spacing:
@@ -116,7 +116,7 @@ To maintain high visual fidelity on the Radeon 780M without lagging:
   - `SHOP_MARKET`, `SHOP_BLACKSMITH`, `SHOP_TAVERN` (Commercial stalls with walk-in counters)
 - **Distance Streaming & Night Emissives (`cities_and_buildings_manager.gd`):**
   - Modular houses and detail props cull beyond `650m` (`HOUSE_STREAMING_DIST_SQ`) for steady 60 FPS.
-  - Window materials and street lanterns smoothly interpolate emissive intensity when night falls (`night_factor > 0.3`).
+  - Dynamic nocturnal interior lighting via `shaders/emissive_window.gdshader` smoothly interpolates window and lantern glow when night falls (`night_factor > 0.3`).
 
 ---
 
@@ -180,3 +180,7 @@ To eliminate T-poses across all deity VRMs, Quaternius mortal rigs, and demon/dr
    - Persistent top bar showing game day, live clock, WTC CPI, 5-race population breakdown, simulation speed buttons (`Pause`, `1x`, `5x`, `20x`, `60x`), and real-time Sister Council notifications.
 5. **`ParcelBorderOverlay` [B]:**
    - Projects color-coded `16×16m` parcel grids and settlement/polity boundary lines onto the terrain mesh.
+6. **`EntityInspector` (Left-Click on Mortal / Deity / Building):**
+   - Detailed inspection window displaying vitals (health, hunger, stamina, distress), mood, 10-D personality vector, equipped gear, and divine actions (Bless, Curse). Dismissed via `[Esc]` or close button.
+7. **`UiStateManager` (`godot_client/scripts/ui/ui_state_manager.gd`):**
+   - Central orchestrator enforcing single-active-modal mutual exclusion, managing mouse capture/release transitions, and binding `[Esc]` to close whichever modal is currently active.

@@ -57,6 +57,8 @@ func _setup_mesh() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_parcel_borders"):
+		if UiStateManager.is_input_blocked():
+			return
 		visible = not visible
 		get_viewport().set_input_as_handled()
 
@@ -88,7 +90,7 @@ func _rebuild_grid(center_cx: int, center_cz: int) -> void:
 	var min_cz: int = center_cz - GRID_RADIUS_CHUNKS
 	var max_cz: int = center_cz + GRID_RADIUS_CHUNKS
 
-	var y_offset: float = 0.25  # Slight offset above ground
+	var y_offset: float = 0.35  # Height offset above ground
 
 	# Draw lines along X and Z
 	for cx in range(min_cx, max_cx + 1):
@@ -101,25 +103,24 @@ func _rebuild_grid(center_cx: int, center_cz: int) -> void:
 			var z0: float = float(cz) * PARCEL_SIZE
 			var z1: float = z0 + PARCEL_SIZE
 
-			var y_approx: float = _sample_terrain_y(x0, z0) + y_offset
+			var y00: float = _sample_terrain_y(x0, z0) + y_offset
+			var y10: float = _sample_terrain_y(x1, z0) + y_offset
+			var y01: float = _sample_terrain_y(x0, z1) + y_offset
 
 			_immediate_mesh.surface_set_color(line_col)
-			_immediate_mesh.surface_add_vertex(Vector3(x0, y_approx, z0))
-			_immediate_mesh.surface_add_vertex(Vector3(x1, y_approx, z0))
+			_immediate_mesh.surface_add_vertex(Vector3(x0, y00, z0))
+			_immediate_mesh.surface_add_vertex(Vector3(x1, y10, z0))
 
 			_immediate_mesh.surface_set_color(line_col)
-			_immediate_mesh.surface_add_vertex(Vector3(x0, y_approx, z0))
-			_immediate_mesh.surface_add_vertex(Vector3(x0, y_approx, z1))
+			_immediate_mesh.surface_add_vertex(Vector3(x0, y00, z0))
+			_immediate_mesh.surface_add_vertex(Vector3(x0, y01, z1))
 
 	_immediate_mesh.surface_end()
 
 
 func _sample_terrain_y(x: float, z: float) -> float:
-	# Central basin default is ~18.5m; smooth heuristic based on distance from center
-	var dist: float = sqrt(x * x + z * z)
-	if dist < 800.0:
-		return 18.2
-	return 18.0 + clamp((dist - 800.0) * 0.015, 0.0, 80.0)
+	TerrainHeightSampler.ensure_loaded()
+	return TerrainHeightSampler.get_height(x, z)
 
 
 func _get_parcel_color(parcel_id: String) -> Color:

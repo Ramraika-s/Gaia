@@ -1,7 +1,7 @@
 """
 sim_core/divine/hierarchy.py
 The Three-Tier Divine Family Hierarchy:
-God -> World Goddess -> 4 Racial God-Mothers.
+God -> World Goddess -> 5 Racial God-Mothers.
 Enforces bestowed naming, finite divine energy, intervention cooldowns,
 mortal oracles (max 3/race), and the Non-Aggression Covenant.
 Follows DIVINE_HIERARCHY_SPEC.md Sections 1, 3, and 4.
@@ -10,6 +10,7 @@ Follows DIVINE_HIERARCHY_SPEC.md Sections 1, 3, and 4.
 from __future__ import annotations
 
 from sim_core.brains.personality import MoodState, PersonalityVector
+from sim_core.config import DEFAULT_DEITY_NAMES
 from sim_core.schemas import (
     DeitySlot,
     DivineEntityRecord,
@@ -36,13 +37,13 @@ RACE_TO_DEITY_SLOT: dict[RaceId, RacialGodMotherSlot] = {
 
 
 class DivineHierarchyManager:
-    """Manages the World Goddess and 4 Racial God-Mothers in RAM."""
+    """Manages the World Goddess and 5 Racial God-Mothers in RAM."""
 
     def __init__(self) -> None:
         self.entities: dict[DeitySlot, DivineEntityRecord] = {
             "world_goddess": DivineEntityRecord(
                 slot="world_goddess",
-                bestowed_name="Gaia",
+                bestowed_name=DEFAULT_DEITY_NAMES["world_goddess"],
                 role="WORLD_GODDESS",
                 patron_race=None,
                 divine_energy=1000.0,
@@ -65,7 +66,7 @@ class DivineHierarchyManager:
             ),
             "gm_human": DivineEntityRecord(
                 slot="gm_human",
-                bestowed_name="Solis",
+                bestowed_name=DEFAULT_DEITY_NAMES["gm_human"],
                 role="RACIAL_GOD_MOTHER",
                 patron_race="HUMAN",
                 divine_energy=300.0,
@@ -92,7 +93,7 @@ class DivineHierarchyManager:
             ),
             "gm_elf": DivineEntityRecord(
                 slot="gm_elf",
-                bestowed_name="Aria",
+                bestowed_name=DEFAULT_DEITY_NAMES["gm_elf"],
                 role="RACIAL_GOD_MOTHER",
                 patron_race="ELF",
                 divine_energy=300.0,
@@ -119,7 +120,7 @@ class DivineHierarchyManager:
             ),
             "gm_dragon": DivineEntityRecord(
                 slot="gm_dragon",
-                bestowed_name="Pyra",
+                bestowed_name=DEFAULT_DEITY_NAMES["gm_dragon"],
                 role="RACIAL_GOD_MOTHER",
                 patron_race="DRAGON",
                 divine_energy=300.0,
@@ -146,7 +147,7 @@ class DivineHierarchyManager:
             ),
             "gm_beasthuman": DivineEntityRecord(
                 slot="gm_beasthuman",
-                bestowed_name="Terra",
+                bestowed_name=DEFAULT_DEITY_NAMES["gm_beasthuman"],
                 role="RACIAL_GOD_MOTHER",
                 patron_race="BEASTHUMAN",
                 divine_energy=300.0,
@@ -173,7 +174,7 @@ class DivineHierarchyManager:
             ),
             "gm_demon": DivineEntityRecord(
                 slot="gm_demon",
-                bestowed_name="Morvath",
+                bestowed_name=DEFAULT_DEITY_NAMES["gm_demon"],
                 role="RACIAL_GOD_MOTHER",
                 patron_race="DEMON",
                 divine_energy=300.0,

@@ -32,7 +32,9 @@ Welcome to the central documentation index for **Gaia v4.0** — the persistent,
 
 ## 4. Player & Operator Guides (`docs/guides/`)
 
-- [PLAYER_AND_OPERATOR_GUIDE.md](file:///home/shivam/Desktop/Gaia/docs/guides/PLAYER_AND_OPERATOR_GUIDE.md): Practical operator handbook covering launch commands (live, offline, headless), complete in-game keyboard/mouse keybindings, Rich God Console CLI reference, Two-Book and Palace Gate UI workflows, and Knowledge Foundry authoring.
+- [PLAYER_AND_OPERATOR_GUIDE.md](file:///home/shivam/Desktop/Gaia/docs/guides/PLAYER_AND_OPERATOR_GUIDE.md): Practical operator handbook covering launch commands (live, offline, headless, fresh), complete in-game keyboard/mouse keybindings, Rich God Console CLI reference, Two-Book, Palace Gate, and Entity Inspector UI workflows, and Knowledge Foundry authoring.
+- [llama_cpp_install_guide.md](file:///home/shivam/Desktop/Gaia/docs/guides/llama_cpp_install_guide.md): Local compilation and hardware acceleration setup for llama.cpp on Fedora Linux 45.
+- [llama_cpp_run_guide.md](file:///home/shivam/Desktop/Gaia/docs/guides/llama_cpp_run_guide.md): Runtime orchestration guide for llama-server with Qwen3.5-4B abliterated GGUF.
 
 ---
 
@@ -44,7 +46,7 @@ Welcome to the central documentation index for **Gaia v4.0** — the persistent,
 
 ## 6. Implementation Roadmap & Milestones (`docs/roadmap/`)
 
-- [IMPLEMENTATION_ROADMAP.md](file:///home/shivam/Desktop/Gaia/docs/roadmap/IMPLEMENTATION_ROADMAP.md): Complete implementation record for Phases 0–5, Gaia v4.0 Sprints 0–6 (including Sprint 5.5 Local LLM Integration), verified test counts (109 unit/integration tests), 10,000-agent benchmarks, and future v4.1+ architectural ideas.
+- [IMPLEMENTATION_ROADMAP.md](file:///home/shivam/Desktop/Gaia/docs/roadmap/IMPLEMENTATION_ROADMAP.md): Complete implementation record for Phases 0–5, Gaia v4.0 Sprints 0–6, Waves 1–6 Hardening & Normalization, verified test counts (182 unit/integration tests), 10,000-agent benchmarks, and future v4.1+ architectural ideas.
 
 ---
 

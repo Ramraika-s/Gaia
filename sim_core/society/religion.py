@@ -12,7 +12,7 @@ from typing import Any
 
 from sim_core.config import TICKS_PER_GAME_DAY
 from sim_core.schemas import AgentRecord as AgentState
-from sim_core.schemas import DeitySlot, PrayerIntent
+from sim_core.schemas import DeitySlot, PrayerIntent, ReligionRecord
 
 INTENT_PRAYER_GAINS: dict[PrayerIntent, tuple[float, float]] = {
     # intent -> (faith_devotion_delta, divine_energy_generated)
@@ -26,11 +26,133 @@ INTENT_PRAYER_GAINS: dict[PrayerIntent, tuple[float, float]] = {
 }
 
 
-class ReligionManager:
-    """Manages mortal faith devotion, prayers, and altar congregations."""
+def get_agent_devotion(agent: AgentState) -> float:
+    """
+    Single source of truth reading synchronized devotion in [0.0, 1.0].
+    Reads agent.personality.devotion if personality exists, else agent.traits['faith_devotion'].
+    """
+    pers = getattr(agent, "personality", None)
+    if pers is not None and hasattr(pers, "devotion"):
+        return max(0.0, min(1.0, float(pers.devotion)))
+    return max(0.0, min(1.0, float(agent.traits.get("faith_devotion", 0.0))))
 
-    def __init__(self):
+
+def set_agent_devotion(agent: AgentState, value: float) -> float:
+    """
+    Clamps value to [0.0, 1.0] and synchronizes both agent.traits['faith_devotion']
+    and agent.personality.devotion (if agent.personality is not None).
+    Returns the clamped devotion value.
+    """
+    clamped = max(0.0, min(1.0, float(value)))
+    agent.traits["faith_devotion"] = clamped
+    pers = getattr(agent, "personality", None)
+    if pers is not None and hasattr(pers, "devotion"):
+        pers.devotion = clamped
+    return clamped
+
+
+class ReligionManager:
+    """Manages mortal faith devotion, prayers, organized religions, and altar congregations."""
+
+    def __init__(self) -> None:
         self.prayer_log: list[dict[str, Any]] = []
+        self.religions: dict[str, ReligionRecord] = {}
+        self.seed_default_faiths()
+
+    def register_religion(self, record: ReligionRecord) -> None:
+        """Registers an organized religion."""
+        self.religions[record.religion_id] = record
+
+    def seed_default_faiths(self) -> None:
+        """Seeds default canonical faiths for World Goddess and the 5 God-Mothers."""
+        defaults = [
+            ReligionRecord(
+                religion_id="rel_world_goddess",
+                name="Order of the World Goddess",
+                aligned_deity_slot="world_goddess",
+                founder_id="system_divine",
+                tenets={
+                    "pacifism": 0.7,
+                    "charity_tithe_rate": 0.05,
+                    "work_ethic": 0.6,
+                    "sacred_land_defense": 0.8,
+                    "heresy_intolerance": 0.1,
+                },
+                canonized_entry_ids=["canon_world_harmony_01"],
+            ),
+            ReligionRecord(
+                religion_id="rel_gm_human",
+                name="Church of the First Mother",
+                aligned_deity_slot="gm_human",
+                founder_id="system_divine",
+                tenets={
+                    "pacifism": 0.4,
+                    "charity_tithe_rate": 0.05,
+                    "work_ethic": 0.8,
+                    "sacred_land_defense": 0.6,
+                    "heresy_intolerance": 0.2,
+                },
+                canonized_entry_ids=["canon_human_covenant_01"],
+            ),
+            ReligionRecord(
+                religion_id="rel_gm_elf",
+                name="Covenant of the Sylph Queen",
+                aligned_deity_slot="gm_elf",
+                founder_id="system_divine",
+                tenets={
+                    "pacifism": 0.8,
+                    "charity_tithe_rate": 0.04,
+                    "work_ethic": 0.5,
+                    "sacred_land_defense": 0.7,
+                    "heresy_intolerance": 0.15,
+                },
+                canonized_entry_ids=["canon_sylph_covenant_01"],
+            ),
+            ReligionRecord(
+                religion_id="rel_gm_dragon",
+                name="Cult of the Primordial Flame",
+                aligned_deity_slot="gm_dragon",
+                founder_id="system_divine",
+                tenets={
+                    "pacifism": 0.3,
+                    "charity_tithe_rate": 0.06,
+                    "work_ethic": 0.7,
+                    "sacred_land_defense": 0.95,
+                    "heresy_intolerance": 0.3,
+                },
+                canonized_entry_ids=["canon_dragon_flame_01"],
+            ),
+            ReligionRecord(
+                religion_id="rel_gm_beasthuman",
+                name="Fang and Claw Brotherhood",
+                aligned_deity_slot="gm_beasthuman",
+                founder_id="system_divine",
+                tenets={
+                    "pacifism": 0.4,
+                    "charity_tithe_rate": 0.05,
+                    "work_ethic": 0.75,
+                    "sacred_land_defense": 0.7,
+                    "heresy_intolerance": 0.2,
+                },
+                canonized_entry_ids=["canon_beasthuman_brotherhood_01"],
+            ),
+            ReligionRecord(
+                religion_id="rel_gm_demon",
+                name="Abyssal Creed",
+                aligned_deity_slot="gm_demon",
+                founder_id="system_divine",
+                tenets={
+                    "pacifism": 0.2,
+                    "charity_tithe_rate": 0.08,
+                    "work_ethic": 0.85,
+                    "sacred_land_defense": 0.9,
+                    "heresy_intolerance": 0.4,
+                },
+                canonized_entry_ids=["canon_abyssal_creed_01"],
+            ),
+        ]
+        for r in defaults:
+            self.register_religion(r)
 
     @staticmethod
     def pray(
@@ -57,9 +179,9 @@ class ReligionManager:
 
         faith_delta, energy_gen = INTENT_PRAYER_GAINS.get(intent, (0.02, 0.5))
 
-        # Apply intent-scaled faith gain
-        current_faith = agent.traits.get("faith_devotion", 0.0)
-        agent.traits["faith_devotion"] = min(1.0, current_faith + faith_delta)
+        # Apply intent-scaled faith gain through canonical setter
+        current_faith = get_agent_devotion(agent)
+        set_agent_devotion(agent, current_faith + faith_delta)
         agent.last_prayer_tick = current_tick
 
         return True, "PRAYER_DELIVERED", energy_gen
@@ -79,9 +201,8 @@ class ReligionManager:
         if ticks_since_prayer > inactivity_threshold:
             # -0.015 per game day, scaled per tick
             decay_per_tick = 0.015 / float(TICKS_PER_GAME_DAY)
-            current_faith = agent.traits.get("faith_devotion", 0.0)
-            new_faith = max(0.0, current_faith - decay_per_tick)
-            agent.traits["faith_devotion"] = new_faith
+            current_faith = get_agent_devotion(agent)
+            new_faith = set_agent_devotion(agent, current_faith - decay_per_tick)
             return current_faith - new_faith
 
         return 0.0
@@ -98,20 +219,20 @@ class ReligionManager:
         # 1. Oracle
         oracles = [a for a in participants if getattr(a, "is_oracle", False)]
         if oracles:
-            return max(oracles, key=lambda o: o.traits.get("faith_devotion", 0.0))
+            return max(oracles, key=lambda o: get_agent_devotion(o))
 
         # 2. Cleric / Pope
         clerics = [a for a in participants if getattr(a, "cleric_rank", "NONE") != "NONE"]
         if clerics:
-            return max(clerics, key=lambda c: c.traits.get("faith_devotion", 0.0))
+            return max(clerics, key=lambda c: get_agent_devotion(c))
 
         # 3. Elder
         elders = [a for a in participants if a.stage == "ELDER"]
         if elders:
-            return max(elders, key=lambda e: e.traits.get("faith_devotion", 0.0))
+            return max(elders, key=lambda e: get_agent_devotion(e))
 
         # 4. Fallback
-        return max(participants, key=lambda p: p.traits.get("faith_devotion", 0.0))
+        return max(participants, key=lambda p: get_agent_devotion(p))
 
     def assemble_congregational_prayer(
         self,

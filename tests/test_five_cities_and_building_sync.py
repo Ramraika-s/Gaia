@@ -73,23 +73,45 @@ def test_five_cities_geometry_palaces_and_gates(tmp_path):
         parcel = engine.property_mgr.parcels[parcel_id]
         assert parcel.settlement_id == cid
 
-        # Check 4 gates
-        gate_suffixes = ["gate_imperial", "gate_right", "gate_outer", "gate_left"]
-        for g_suf in gate_suffixes:
+        # Check 4 gates and tangent alignment (Local +Z outward radial, Local X flush tangent)
+        main_angle = math.atan2(-city.center_z, -city.center_x)
+        gate_specs = [
+            ("gate_imperial", main_angle),
+            ("gate_right", (main_angle + math.pi * 0.5) % (2.0 * math.pi)),
+            ("gate_outer", (main_angle + math.pi) % (2.0 * math.pi)),
+            ("gate_left", (main_angle + math.pi * 1.5) % (2.0 * math.pi)),
+        ]
+        for g_suf, g_angle in gate_specs:
             gid = f"bld_{cid}_{g_suf}"
             assert gid in city_mgr.buildings
             gate = city_mgr.buildings[gid]
             assert gate.building_type == "CITY_GATE"
             dist_to_center = math.hypot(gate.x - city.center_x, gate.z - city.center_z)
             assert abs(dist_to_center - 240.0) < 2.0
+            expected_rot_y = round((math.pi * 0.5) - g_angle, 4)
+            assert gate.rotation_y == expected_rot_y
+            # Local +Z after rotation_y around Y is (sin(rot_y), cos(rot_y))
+            # which equals outward radial (cos(g_angle), sin(g_angle)).
+            assert abs(math.sin(gate.rotation_y) - math.cos(g_angle)) < 1e-3
+            assert abs(math.cos(gate.rotation_y) - math.sin(g_angle)) < 1e-3
 
-        # Check seed buildings (18 to 24 seed housing/shops)
+        # Check seed buildings (44 dense urban housing/shop parcels per city)
         seed_buildings = [
             b
             for b in city_mgr.buildings.values()
             if b.city_id == cid and b.building_type not in ("GODMOTHER_PALACE", "CITY_GATE")
         ]
-        assert 18 <= len(seed_buildings) <= 24
+        assert len(seed_buildings) == 44
+
+        # Zero pairwise overlap and strict zoning inside city curtain wall (r = 58..214m)
+        unique_parcels = {(b.parcel_x, b.parcel_z) for b in seed_buildings}
+        assert len(unique_parcels) == 44
+        for i, b1 in enumerate(seed_buildings):
+            dist_from_city = math.hypot(b1.x - city.center_x, b1.z - city.center_z)
+            assert 58.0 <= dist_from_city <= 214.0
+            for b2 in seed_buildings[i + 1 :]:
+                pair_dist = math.hypot(b1.x - b2.x, b1.z - b2.z)
+                assert pair_dist >= b1.footprint_radius + b2.footprint_radius + 2.5
 
         # Archetypes present
         btypes = {b.building_type for b in seed_buildings}
@@ -101,8 +123,8 @@ def test_five_cities_geometry_palaces_and_gates(tmp_path):
         # Housing market active: ~35% for sale, ~65% owned
         for_sale_count = sum(1 for b in seed_buildings if b.for_sale)
         owned_count = sum(1 for b in seed_buildings if not b.for_sale)
-        assert for_sale_count >= 5
-        assert owned_count >= 10
+        assert for_sale_count >= 14
+        assert owned_count >= 26
 
 
 def test_ring_2_frontier_wilderness_invariant(tmp_path):
@@ -214,8 +236,8 @@ async def test_websocket_building_sync_and_live_purchase(tmp_path):
             bld_sync = json.loads(await ws.recv())
             assert bld_sync["type"] == "BUILDING_SYNC"
             assert len(bld_sync["cities"]) == 5
-            # 5 cities * (1 palace + 4 gates + 20 seeds) = 125 total buildings
-            assert len(bld_sync["buildings"]) >= 100
+            # 5 cities * (1 palace + 4 gates + 44 seeds) = 245 total buildings
+            assert len(bld_sync["buildings"]) == 245
 
             # Find a building listed for sale
             for_sale_bld = next(b for b in engine.city_layout.buildings.values() if b.for_sale)

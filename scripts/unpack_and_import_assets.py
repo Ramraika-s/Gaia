@@ -362,7 +362,6 @@ def unpack_audio():
         (DOWNLOADS_ASSETS / "kenney_impact-sounds.zip", GODOT_ASSETS / "audio" / "impacts"),
         (DOWNLOADS_ASSETS / "kenney_ui-audio.zip", GODOT_ASSETS / "audio" / "ui"),
         (DOWNLOADS_ASSETS / "kenney_interface-sounds.zip", GODOT_ASSETS / "audio" / "ui"),
-        (DOWNLOADS_ASSETS / "kenney_voiceover-pack-fighter.zip", GODOT_ASSETS / "audio" / "voice"),
     ]
 
     for zip_path, target_dir in packs:
@@ -434,7 +433,6 @@ def generate_asset_manifest():
             "audio_rpg": "res://assets/audio/rpg/",
             "audio_impacts": "res://assets/audio/impacts/",
             "audio_ui": "res://assets/audio/ui/",
-            "audio_voice": "res://assets/audio/voice/",
         },
     }
 

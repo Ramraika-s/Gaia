@@ -1,122 +1,485 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=31 format=3]
 
-[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/banner_white.gltf" id="1_banner"]
-[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall_arched.gltf" id="2_wall_arch"]
+[ext_resource type="Texture2D" path="res://assets/buildings/village/t_rock_trim_base_color.png" id="1_rock_alb"]
+[ext_resource type="Texture2D" path="res://assets/buildings/village/t_rock_trim_normal.png" id="2_rock_nrm"]
+[ext_resource type="Shader" path="res://shaders/emissive_window.gdshader" id="3_win_shader"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/floor_tile_large.gltf" id="4_floor_tile_large"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall.gltf" id="5_wall"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall_archedwindow_gated.gltf" id="6_wall_archedwindow_gated"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/pillar.gltf" id="7_pillar"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/barrier_column.gltf" id="8_barrier_column"]
+[ext_resource type="PackedScene" path="res://assets/buildings/village/roof_tower_round_tiles.gltf" id="9_roof_tower_round_tiles"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/torch_lit.gltf" id="10_torch_lit"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall_archedwindow_open.gltf" id="11_wall_archedwindow_open"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/pillar_decorated.gltf" id="12_pillar_decorated"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/barrier.gltf" id="13_barrier"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/wall_pillar.gltf" id="14_wall_pillar"]
+[ext_resource type="PackedScene" path="res://assets/buildings/dungeon/banner_white.gltf" id="15_banner_white"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_masonry"]
-albedo_color = Color(0.68, 0.69, 0.72, 1)
-roughness = 0.75
-metallic = 0.05
+[sub_resource type="StandardMaterial3D" id="Mat_StoneSkirt"]
+albedo_color = Color(0.68, 0.65, 0.60, 1)
+albedo_texture = ExtResource("1_rock_alb")
+roughness = 0.78
+metallic = 0.04
+normal_enabled = true
+normal_scale = 0.6
+normal_texture = ExtResource("2_rock_nrm")
+uv1_scale = Vector3(0.45, 0.45, 0.45)
+uv1_triplanar = true
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trim"]
-albedo_color = Color(0.38, 0.4, 0.45, 1)
-roughness = 0.6
-metallic = 0.1
+[sub_resource type="StandardMaterial3D" id="Mat_GateTrim"]
+albedo_color = Color(0.45, 0.46, 0.5, 1)
+roughness = 0.55
+metallic = 0.15
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_tower"]
-size = Vector3(4.5, 9, 4.5)
+[sub_resource type="ShaderMaterial" id="Mat_GateGlow"]
+render_priority = 0
+shader = ExtResource("3_win_shader")
+shader_parameter/day_glass_color = Color(0.14, 0.2, 0.28, 1)
+shader_parameter/night_glow_color = Color(1, 0.82, 0.42, 1)
+shader_parameter/max_emission_energy = 2.8
 
-[sub_resource type="BoxMesh" id="BoxMesh_tower"]
-material = SubResource("StandardMaterial3D_masonry")
-size = Vector3(4.5, 9, 4.5)
+[sub_resource type="SphereMesh" id="Mesh_Flame"]
+material = SubResource("Mat_GateGlow")
+radius = 0.28
+height = 0.56
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_bridge"]
-size = Vector3(6, 1.2, 4.5)
+[sub_resource type="BoxMesh" id="Mesh_RoadPlinth"]
+material = SubResource("Mat_StoneSkirt")
+size = Vector3(9.4, 2.5, 10)
 
-[sub_resource type="BoxMesh" id="BoxMesh_bridge"]
-material = SubResource("StandardMaterial3D_trim")
-size = Vector3(6, 1.2, 4.5)
+[sub_resource type="BoxMesh" id="Mesh_TowerPlinth"]
+material = SubResource("Mat_StoneSkirt")
+size = Vector3(5, 2.6, 5)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_curtain"]
-size = Vector3(14, 5.5, 2.5)
+[sub_resource type="BoxShape3D" id="Shape_WestTower"]
+size = Vector3(4.6, 10, 4.6)
 
-[sub_resource type="BoxMesh" id="BoxMesh_curtain"]
-material = SubResource("StandardMaterial3D_masonry")
-size = Vector3(14, 5.5, 2.5)
+[sub_resource type="BoxShape3D" id="Shape_EastTower"]
+size = Vector3(4.6, 10, 4.6)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_parapet"]
-size = Vector3(6, 1.2, 0.5)
+[sub_resource type="BoxShape3D" id="Shape_GateBridge"]
+size = Vector3(9, 4, 4.2)
 
-[sub_resource type="BoxMesh" id="BoxMesh_parapet"]
-material = SubResource("StandardMaterial3D_trim")
-size = Vector3(6, 1.2, 0.5)
+[sub_resource type="BoxMesh" id="Mesh_BridgeLintel"]
+material = SubResource("Mat_StoneSkirt")
+size = Vector3(9.2, 0.7, 4.1)
+
+[sub_resource type="BoxMesh" id="Mesh_BridgeGlass"]
+material = SubResource("Mat_GateGlow")
+size = Vector3(1.6, 2.2, 0.08)
+
+[sub_resource type="BoxMesh" id="Mesh_WingPlinth"]
+material = SubResource("Mat_StoneSkirt")
+size = Vector3(11.4, 2.6, 2.4)
+
+[sub_resource type="BoxShape3D" id="Shape_CurtainWallLeft"]
+size = Vector3(11.2, 6.2, 2.2)
+
+[sub_resource type="BoxShape3D" id="Shape_CurtainWallRight"]
+size = Vector3(11.2, 6.2, 2.2)
+
+[sub_resource type="BoxMesh" id="Mesh_TrimCrown"]
+material = SubResource("Mat_GateTrim")
+size = Vector3(9.3, 0.35, 4.2)
 
 [node name="CityGateAndWall" type="Node3D"]
+[node name="Roadway" type="Node3D" parent="."]
 
-[node name="WestTower" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.25, 4.5, 0)
+[node name="RoadPlinth" type="MeshInstance3D" parent="Roadway"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.25, 0)
+mesh = SubResource("Mesh_RoadPlinth")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="WestTower"]
-shape = SubResource("BoxShape3D_tower")
+[node name="RoadTile_-2_-4" parent="Roadway" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -4)
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="WestTower"]
-mesh = SubResource("BoxMesh_tower")
+[node name="RoadTile_-2_0" parent="Roadway" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
 
-[node name="EastTower" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.25, 4.5, 0)
+[node name="RoadTile_-2_4" parent="Roadway" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 4)
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="EastTower"]
-shape = SubResource("BoxShape3D_tower")
+[node name="RoadTile_2_-4" parent="Roadway" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, -4)
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="EastTower"]
-mesh = SubResource("BoxMesh_tower")
+[node name="RoadTile_2_0" parent="Roadway" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+
+[node name="RoadTile_2_4" parent="Roadway" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 4)
+
+[node name="WestTower" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.75, 0, 0)
+
+[node name="TowerBody" type="StaticBody3D" parent="WestTower"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.5, 0)
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WestTower/TowerBody"]
+shape = SubResource("Shape_WestTower")
+
+[node name="Skirt" type="MeshInstance3D" parent="WestTower"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.25, 0)
+mesh = SubResource("Mesh_TowerPlinth")
+
+[node name="Front_0" parent="WestTower" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.8)
+
+[node name="Back_0" parent="WestTower" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -1.8)
+
+[node name="Right_0" parent="WestTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.8, 0, 0)
+
+[node name="Left_0" parent="WestTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -1.8, 0, 0)
+
+[node name="Pillar_0_0" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 0, 1.95)
+
+[node name="Pillar_0_1" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 0, 1.95)
+
+[node name="Pillar_0_2" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 0, -1.95)
+
+[node name="Pillar_0_3" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 0, -1.95)
+
+[node name="Front_4" parent="WestTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 1.8)
+
+[node name="Back_4" parent="WestTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4, -1.8)
+
+[node name="Right_4" parent="WestTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.8, 4, 0)
+
+[node name="Left_4" parent="WestTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -1.8, 4, 0)
+
+[node name="Pillar_4_0" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 4, 1.95)
+
+[node name="Pillar_4_1" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 4, 1.95)
+
+[node name="Pillar_4_2" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 4, -1.95)
+
+[node name="Pillar_4_3" parent="WestTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 4, -1.95)
+
+[node name="ParapetF" parent="WestTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 2)
+
+[node name="ParapetB" parent="WestTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 8, -2)
+
+[node name="ParapetR" parent="WestTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 2, 8, 0)
+
+[node name="ParapetL" parent="WestTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -2, 8, 0)
+
+[node name="TowerRoof" parent="WestTower" instance=ExtResource("9_roof_tower_round_tiles")]
+transform = Transform3D(1.08, 0, 0, 0, 1.05, 0, 0, 0, 1.08, 0, 9.25, 0)
+
+[node name="TorchTop" parent="WestTower" instance=ExtResource("10_torch_lit")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8.8, 2.25)
+
+[node name="EastTower" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.75, 0, 0)
+
+[node name="TowerBody" type="StaticBody3D" parent="EastTower"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.5, 0)
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="EastTower/TowerBody"]
+shape = SubResource("Shape_EastTower")
+
+[node name="Skirt" type="MeshInstance3D" parent="EastTower"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.25, 0)
+mesh = SubResource("Mesh_TowerPlinth")
+
+[node name="Front_0" parent="EastTower" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.8)
+
+[node name="Back_0" parent="EastTower" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -1.8)
+
+[node name="Right_0" parent="EastTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.8, 0, 0)
+
+[node name="Left_0" parent="EastTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -1.8, 0, 0)
+
+[node name="Pillar_0_0" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 0, 1.95)
+
+[node name="Pillar_0_1" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 0, 1.95)
+
+[node name="Pillar_0_2" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 0, -1.95)
+
+[node name="Pillar_0_3" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 0, -1.95)
+
+[node name="Front_4" parent="EastTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 1.8)
+
+[node name="Back_4" parent="EastTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 4, -1.8)
+
+[node name="Right_4" parent="EastTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.8, 4, 0)
+
+[node name="Left_4" parent="EastTower" instance=ExtResource("6_wall_archedwindow_gated")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -1.8, 4, 0)
+
+[node name="Pillar_4_0" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 4, 1.95)
+
+[node name="Pillar_4_1" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 4, 1.95)
+
+[node name="Pillar_4_2" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.95, 4, -1.95)
+
+[node name="Pillar_4_3" parent="EastTower" instance=ExtResource("7_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.95, 4, -1.95)
+
+[node name="ParapetF" parent="EastTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 2)
+
+[node name="ParapetB" parent="EastTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 8, -2)
+
+[node name="ParapetR" parent="EastTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 2, 8, 0)
+
+[node name="ParapetL" parent="EastTower" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -2, 8, 0)
+
+[node name="TowerRoof" parent="EastTower" instance=ExtResource("9_roof_tower_round_tiles")]
+transform = Transform3D(1.08, 0, 0, 0, 1.05, 0, 0, 0, 1.08, 0, 9.25, 0)
+
+[node name="TorchTop" parent="EastTower" instance=ExtResource("10_torch_lit")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8.8, 2.25)
 
 [node name="GateBridge" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.5, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7.6, 0)
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="GateBridge"]
-shape = SubResource("BoxShape3D_bridge")
+shape = SubResource("Shape_GateBridge")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="GateBridge"]
-mesh = SubResource("BoxMesh_bridge")
+[node name="LintelSoffit" type="MeshInstance3D" parent="GateBridge"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2, 0)
+mesh = SubResource("Mesh_BridgeLintel")
 
-[node name="ParapetFront" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.7, 2)
+[node name="Deck_-22" parent="GateBridge" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, -1.7, 0)
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="ParapetFront"]
-shape = SubResource("BoxShape3D_parapet")
+[node name="Deck_0" parent="GateBridge" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.7, 0)
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="ParapetFront"]
-mesh = SubResource("BoxMesh_parapet")
+[node name="Deck_22" parent="GateBridge" instance=ExtResource("4_floor_tile_large")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, -1.7, 0)
 
-[node name="ParapetBack" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.7, -2)
+[node name="GalleryF_-22" parent="GateBridge" instance=ExtResource("11_wall_archedwindow_open")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, -1.65, 1.65)
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="ParapetBack"]
-shape = SubResource("BoxShape3D_parapet")
+[node name="GalleryB_-22" parent="GateBridge" instance=ExtResource("11_wall_archedwindow_open")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2.25, -1.65, -1.65)
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="ParapetBack"]
-mesh = SubResource("BoxMesh_parapet")
+[node name="MerlonF_-22" parent="GateBridge" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 2.35, 1.8)
+
+[node name="MerlonB_-22" parent="GateBridge" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -2.25, 2.35, -1.8)
+
+[node name="GalleryF_22" parent="GateBridge" instance=ExtResource("11_wall_archedwindow_open")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, -1.65, 1.65)
+
+[node name="GalleryB_22" parent="GateBridge" instance=ExtResource("11_wall_archedwindow_open")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2.25, -1.65, -1.65)
+
+[node name="MerlonF_22" parent="GateBridge" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 2.35, 1.8)
+
+[node name="MerlonB_22" parent="GateBridge" instance=ExtResource("8_barrier_column")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2.25, 2.35, -1.8)
+
+[node name="CenterCrestPillar" parent="GateBridge" instance=ExtResource("12_pillar_decorated")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.65, 1.65)
+
+[node name="WindowGlass_BridgeL" type="MeshInstance3D" parent="GateBridge"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0.3, 1.4)
+mesh = SubResource("Mesh_BridgeGlass")
+
+[node name="WindowGlass_BridgeR" type="MeshInstance3D" parent="GateBridge"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.25, 0.3, 1.4)
+mesh = SubResource("Mesh_BridgeGlass")
 
 [node name="CurtainWallLeft" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14.5, 2.75, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14.5, 3.1, 0)
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="CurtainWallLeft"]
-shape = SubResource("BoxShape3D_curtain")
+shape = SubResource("Shape_CurtainWallLeft")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="CurtainWallLeft"]
-mesh = SubResource("BoxMesh_curtain")
+[node name="WingSkirt" type="MeshInstance3D" parent="CurtainWallLeft"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4.4, 0)
+mesh = SubResource("Mesh_WingPlinth")
+
+[node name="WallF_0" parent="CurtainWallLeft" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, 3.7, -3.1, 0.5)
+
+[node name="WallB_0" parent="CurtainWallLeft" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1.35, 0, 0, 0, -1, 3.7, -3.1, -0.5)
+
+[node name="BattlementF_0" parent="CurtainWallLeft" instance=ExtResource("13_barrier")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.7, 2.3, 0.82)
+
+[node name="BattlementB_0" parent="CurtainWallLeft" instance=ExtResource("13_barrier")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 3.7, 2.3, -0.82)
+
+[node name="WallF_1" parent="CurtainWallLeft" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, 0, -3.1, 0.5)
+
+[node name="WallB_1" parent="CurtainWallLeft" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1.35, 0, 0, 0, -1, 0, -3.1, -0.5)
+
+[node name="BattlementF_1" parent="CurtainWallLeft" instance=ExtResource("13_barrier")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0.82)
+
+[node name="BattlementB_1" parent="CurtainWallLeft" instance=ExtResource("13_barrier")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 2.3, -0.82)
+
+[node name="WallF_2" parent="CurtainWallLeft" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, -3.7, -3.1, 0.5)
+
+[node name="WallB_2" parent="CurtainWallLeft" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1.35, 0, 0, 0, -1, -3.7, -3.1, -0.5)
+
+[node name="BattlementF_2" parent="CurtainWallLeft" instance=ExtResource("13_barrier")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.7, 2.3, 0.82)
+
+[node name="BattlementB_2" parent="CurtainWallLeft" instance=ExtResource("13_barrier")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -3.7, 2.3, -0.82)
+
+[node name="ButtressInner" parent="CurtainWallLeft" instance=ExtResource("14_wall_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, -1.85, -3.1, 0)
 
 [node name="CurtainWallRight" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 2.75, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 3.1, 0)
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="CurtainWallRight"]
-shape = SubResource("BoxShape3D_curtain")
+shape = SubResource("Shape_CurtainWallRight")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="CurtainWallRight"]
-mesh = SubResource("BoxMesh_curtain")
+[node name="WingSkirt" type="MeshInstance3D" parent="CurtainWallRight"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4.4, 0)
+mesh = SubResource("Mesh_WingPlinth")
 
-[node name="BannerL" parent="." instance=ExtResource("1_banner")]
-transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, -3.2, 3.5, 2.3)
+[node name="WallF_0" parent="CurtainWallRight" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, -3.7, -3.1, 0.5)
 
-[node name="BannerR" parent="." instance=ExtResource("1_banner")]
-transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 3.2, 3.5, 2.3)
+[node name="WallB_0" parent="CurtainWallRight" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1.35, 0, 0, 0, -1, -3.7, -3.1, -0.5)
+
+[node name="BattlementF_0" parent="CurtainWallRight" instance=ExtResource("13_barrier")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.7, 2.3, 0.82)
+
+[node name="BattlementB_0" parent="CurtainWallRight" instance=ExtResource("13_barrier")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -3.7, 2.3, -0.82)
+
+[node name="WallF_1" parent="CurtainWallRight" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, 0, -3.1, 0.5)
+
+[node name="WallB_1" parent="CurtainWallRight" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1.35, 0, 0, 0, -1, 0, -3.1, -0.5)
+
+[node name="BattlementF_1" parent="CurtainWallRight" instance=ExtResource("13_barrier")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0.82)
+
+[node name="BattlementB_1" parent="CurtainWallRight" instance=ExtResource("13_barrier")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 2.3, -0.82)
+
+[node name="WallF_2" parent="CurtainWallRight" instance=ExtResource("5_wall")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, 3.7, -3.1, 0.5)
+
+[node name="WallB_2" parent="CurtainWallRight" instance=ExtResource("5_wall")]
+transform = Transform3D(-1, 0, 0, 0, 1.35, 0, 0, 0, -1, 3.7, -3.1, -0.5)
+
+[node name="BattlementF_2" parent="CurtainWallRight" instance=ExtResource("13_barrier")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.7, 2.3, 0.82)
+
+[node name="BattlementB_2" parent="CurtainWallRight" instance=ExtResource("13_barrier")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 3.7, 2.3, -0.82)
+
+[node name="ButtressInner" parent="CurtainWallRight" instance=ExtResource("14_wall_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1.35, 0, 0, 0, 1, 1.85, -3.1, 0)
+
+[node name="BannerL" parent="." instance=ExtResource("15_banner_white")]
+transform = Transform3D(1.35, 0, 0, 0, 1.35, 0, 0, 0, 1.35, -6.75, 4.2, 2.18)
+
+[node name="BannerR" parent="." instance=ExtResource("15_banner_white")]
+transform = Transform3D(1.35, 0, 0, 0, 1.35, 0, 0, 0, 1.35, 6.75, 4.2, 2.18)
+
+[node name="Banners" type="Node3D" parent="."]
+
+[node name="BannerRearL" parent="Banners" instance=ExtResource("15_banner_white")]
+transform = Transform3D(-1.35, 0, 0, 0, 1.35, 0, 0, 0, -1.35, -6.75, 4.2, -2.18)
+
+[node name="BannerRearR" parent="Banners" instance=ExtResource("15_banner_white")]
+transform = Transform3D(-1.35, 0, 0, 0, 1.35, 0, 0, 0, -1.35, 6.75, 4.2, -2.18)
+
+[node name="RoofTrim" type="Node3D" parent="."]
+
+[node name="BridgeCornice" type="MeshInstance3D" parent="RoofTrim"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 9.8, 0)
+mesh = SubResource("Mesh_TrimCrown")
 
 [node name="GatePlaque" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.6, 2.35)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 11.2, 2.5)
 billboard = 1
-font_size = 36
-modulate = Color(1, 0.85, 0.35, 1)
+font_size = 38
+modulate = Color(1, 0.95, 0.6, 1)
 outline_size = 6
 outline_modulate = Color(0.1, 0.1, 0.1, 0.9)
 text = "IMPERIAL GATE"
+
+[node name="BrazierGateLeft" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.65, 2.8, 2.55)
+
+[node name="TorchStand" parent="BrazierGateLeft" instance=ExtResource("10_torch_lit")]
+transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0, 0, 0)
+
+[node name="Flame" type="MeshInstance3D" parent="BrazierGateLeft"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.72, 0)
+mesh = SubResource("Mesh_Flame")
+
+[node name="Light" type="OmniLight3D" parent="BrazierGateLeft"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0.25)
+light_color = Color(1, 0.72, 0.3, 1)
+light_energy = 2.2
+omni_range = 12
+
+[node name="BrazierGateRight" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.65, 2.8, 2.55)
+
+[node name="TorchStand" parent="BrazierGateRight" instance=ExtResource("10_torch_lit")]
+transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0, 0, 0)
+
+[node name="Flame" type="MeshInstance3D" parent="BrazierGateRight"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.72, 0)
+mesh = SubResource("Mesh_Flame")
+
+[node name="Light" type="OmniLight3D" parent="BrazierGateRight"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0.25)
+light_color = Color(1, 0.72, 0.3, 1)
+light_energy = 2.2
+omni_range = 12

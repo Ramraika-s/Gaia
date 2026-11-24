@@ -18,11 +18,13 @@ import logging
 import os
 import re
 import threading
+import time
 import urllib.error
 import urllib.request
+import uuid
 from typing import TYPE_CHECKING, Any
 
-from sim_core.schemas import DialogueRequest, DialogueResponse
+from sim_core.schemas import CommitProposal, DialogueRequest, DialogueResponse
 
 if TYPE_CHECKING:
     from sim_core.engine import SimulationEngine
@@ -34,7 +36,22 @@ DEFAULT_LLM_MODEL = os.environ.get(
     "GAIA_LLM_MODEL", "models/Huihui-Qwen3.5-4B-abliterated.Q5_K_M.gguf"
 )
 DEFAULT_MODEL_DISPLAY = "Huihui-Qwen3.5-4B"
-LLM_TIMEOUT_SECONDS = 35.0
+LLM_TIMEOUT_SECONDS = 14.0
+LLM_HEALTH_REPROBE_INTERVAL_SECONDS = 20.0
+
+
+SAFE_DIVINE_ACTIONS: frozenset[str] = frozenset(
+    {
+        "CONVENE_COUNCIL",
+        "PATROL_PLAZA",
+        "RETURN_PALACE",
+        "INSPECT_LIBRARY",
+        "INSPECT_WTC",
+        "RECORD_LEDGER_NOTE",
+        "PROPOSE_TRUCE",
+        "BLESS_HARVEST",
+    }
+)
 
 
 def extract_json_from_llm_text(text: str) -> dict[str, Any] | None:
@@ -79,7 +96,7 @@ def extract_json_from_llm_text(text: str) -> dict[str, Any] | None:
     if reply_match:
         try:
             unescaped = json.loads(f'"{reply_match.group(1)}"')
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             unescaped = reply_match.group(1)
         return {"spoken_reply": unescaped}
 
@@ -104,6 +121,8 @@ class DivineLLMBrain:
         self.model_name = model_name
         self.active_model_name = active_model_name
         self.llm_online: bool = False
+        # Monotonic timestamp of the last health probe / failed request (0.0 = never probed).
+        self._last_health_check_time: float = 0.0
         self._lock = threading.Lock()
 
     def build_rag_context(self, target_slot: str) -> dict[str, Any]:
@@ -138,7 +157,7 @@ class DivineLLMBrain:
 
         # 2. Economy
         if hasattr(self.engine, "wtc"):
-            ctx["cpi"] = round(getattr(self.engine.wtc, "fisher_cpi", 1.0), 3)
+            ctx["cpi"] = round(getattr(self.engine.wtc, "cpi", 1.0), 3)
         if hasattr(self.engine, "bank"):
             ctx["money_supply"] = round(
                 self.engine.bank.calculate_total_circulation(list(self.engine.agents.values())),
@@ -178,6 +197,7 @@ class DivineLLMBrain:
 
     def check_health(self) -> bool:
         """Checks if llama-server is healthy at /health endpoint."""
+        self._last_health_check_time = time.monotonic()
         try:
             base_url = self.llm_url.split("/v1/")[0]
             health_url = f"{base_url}/health"
@@ -185,7 +205,7 @@ class DivineLLMBrain:
             with urllib.request.urlopen(req, timeout=1.0) as resp:
                 self.llm_online = resp.status == 200
                 return self.llm_online
-        except Exception:
+        except (urllib.error.URLError, TimeoutError, OSError):
             self.llm_online = False
             return False
 
@@ -224,6 +244,14 @@ class DivineLLMBrain:
         Strips thinking blocks and code fences, returning parsed JSON dict.
         """
         with self._lock:
+            # Fast failover: while offline, re-probe /health at most once per interval so
+            # dialogue replies return instantly via OFFLINE_FALLBACK instead of burning timeouts.
+            if not self.llm_online and self._last_health_check_time > 0.0:
+                since = time.monotonic() - self._last_health_check_time
+                if since < LLM_HEALTH_REPROBE_INTERVAL_SECONDS:
+                    return None
+                if not self.check_health():
+                    return None
             payload: dict[str, Any] = {
                 "model": self.model_name,
                 "messages": [
@@ -237,11 +265,13 @@ class DivineLLMBrain:
             resp_data = self._send_http_request(payload, timeout=LLM_TIMEOUT_SECONDS)
             if not resp_data or not isinstance(resp_data, dict):
                 self.llm_online = False
+                self._last_health_check_time = time.monotonic()
                 return None
 
             choices = resp_data.get("choices", [])
             if not choices or not isinstance(choices, list):
                 self.llm_online = False
+                self._last_health_check_time = time.monotonic()
                 return None
 
             content = choices[0].get("message", {}).get("content", "")
@@ -250,9 +280,7 @@ class DivineLLMBrain:
                 self.llm_online = True
                 return parsed
             else:
-                logger.warning(
-                    "Failed to extract valid JSON from LLM response: %s", content[:120]
-                )
+                logger.warning("Failed to extract valid JSON from LLM response: %s", content[:120])
                 return None
 
     def generate_dialogue(self, request: DialogueRequest) -> DialogueResponse:
@@ -293,11 +321,16 @@ class DivineLLMBrain:
             )
 
         # Attempt local LLM
+        memories_str = ""
+        if ctx.get("top_memories"):
+            memories_str = f" Recent memories: {'; '.join(ctx['top_memories'])}."
+
         system_prompt = (
             f"You are {name}, {title} of the Gaia civilization. "
             f"Your race affinity is {race}. Your personality traits: {ctx['personality']}. "
             f"Current mood: {ctx['mood']}. World telemetry: CPI={ctx['cpi']}, "
-            f"Populations={ctx['populations']}, Active proposals={ctx['pending_proposals']}. "
+            f"Populations={ctx['populations']}, "
+            f"Active proposals={ctx['pending_proposals']}.{memories_str} "
             "Output strictly valid JSON with keys: "
             "spoken_reply (string, 1-2 concise regal sentences), "
             "mood_delta (dict), proposed_action (optional dict)."
@@ -305,8 +338,12 @@ class DivineLLMBrain:
         user_prompt = f"God says: '{message}'. Order: '{order}'. Formulate your reply."
         llm_result = self._query_local_llm(user_prompt, system_prompt)
 
-        if llm_result and isinstance(llm_result, dict) and "spoken_reply" in llm_result:
-            spoken_reply = str(llm_result["spoken_reply"])
+        if (
+            llm_result
+            and isinstance(llm_result, dict)
+            and str(llm_result.get("spoken_reply") or "").strip()
+        ):
+            spoken_reply = str(llm_result["spoken_reply"]).strip()
             # Validate proposed action through critic if present
             prop_action = llm_result.get("proposed_action")
             if prop_action and self.engine and hasattr(self.engine, "world_goddess"):
@@ -393,7 +430,26 @@ class DivineLLMBrain:
                 "in the hall, and no contested treatises demand our immediate intervention."
             )
 
-        # Deity-specific flavor
+        return self._flavor_reply(slot) + self._grounded_suffix(ctx)
+
+    @staticmethod
+    def _grounded_suffix(ctx: dict[str, Any]) -> str:
+        """Appends real populations, CPI, proposals, and memories so replies never feel canned."""
+        pops = ctx.get("populations", {}) or {}
+        parts = [
+            f"The realm counts {sum(pops.values())} souls",
+            f"CPI rests at {float(ctx.get('cpi', 1.0)):.2f}",
+            f"{int(ctx.get('pending_proposals', 0))} petitions await judgment",
+        ]
+        suffix = " (" + "; ".join(parts) + ".)"
+        mems = ctx.get("top_memories") or []
+        if mems:
+            suffix += f" I recall: {mems[0]}."
+        return suffix
+
+    @staticmethod
+    def _flavor_reply(slot: str) -> str:
+        """Deity-specific flavor text (never empty)."""
         if slot == "world_goddess":
             return (
                 "Peace be with You, My Lord. I watch over our daughters and balance the "
@@ -470,12 +526,37 @@ class DivineLLMBrain:
         )
 
     def _validate_proposed_action(self, deity_slot: str, action: dict[str, Any]) -> bool:
-        """Validates actions through WorldGoddessCritic."""
-        # Fail-closed validation
+        """Validates actions strictly fail-closed through allowlist and WorldGoddessCritic."""
         action_type = action.get("action_type")
         if not action_type or not isinstance(action_type, str):
             return False
-        # Disallow arbitrary code or unauthorized minting
-        if action_type in ("MINT_CREDITS", "EXECUTE_SYSTEM_COMMAND", "DESTROY_CITY"):
+
+        if action_type not in SAFE_DIVINE_ACTIONS:
             return False
+
+        if (
+            self.engine
+            and hasattr(self.engine, "world_goddess")
+            and self.engine.world_goddess is not None
+        ):
+            kind_map = {
+                "CONVENE_COUNCIL": "SISTER_COUNCIL_RESOLUTION",
+                "PROPOSE_TRUCE": "SISTER_COUNCIL_RESOLUTION",
+                "RECORD_LEDGER_NOTE": "DIVINE_DECREE",
+                "INSPECT_LIBRARY": "LIBRARY_ENTRY",
+                "INSPECT_WTC": "WTC_INTERVENTION",
+                "PATROL_PLAZA": "GOD_MOTHER_INTERVENTION",
+                "RETURN_PALACE": "GOD_MOTHER_INTERVENTION",
+            }
+            commit_kind = kind_map.get(action_type, "GOD_MOTHER_INTERVENTION")
+            proposal = CommitProposal(
+                proposal_id=f"divine_act_{uuid.uuid4().hex[:8]}",
+                tick=getattr(self.engine, "current_tick", 0),
+                kind=commit_kind,  # type: ignore
+                actor_id=deity_slot,
+                payload=action,
+            )
+            verdict = self.engine.world_goddess.evaluate(proposal)
+            return verdict.status == "SUCCESS"
+
         return True

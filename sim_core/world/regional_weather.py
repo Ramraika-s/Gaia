@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import random
+import zlib
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -30,6 +31,10 @@ class RegionalWeatherCell:
     velocity_z: float
     intensity: float
     biome_bias: str
+    anchor_x: float = 0.0
+    anchor_z: float = 0.0
+    max_drift_radius: float = 0.0
+    base_weather_type: WeatherType = "CLEAR"
 
 
 class RegionalWeatherEngine:
@@ -57,6 +62,10 @@ class RegionalWeatherEngine:
                 velocity_z=0.04,
                 intensity=0.95,
                 biome_bias="DEMON_CALDERA",
+                anchor_x=-2400.0,
+                anchor_z=-1650.0,
+                max_drift_radius=350.0,
+                base_weather_type="ASH",
             ),
             # 2. Dragon Obsidian Alpine Snow Cell (North-East)
             RegionalWeatherCell(
@@ -69,6 +78,10 @@ class RegionalWeatherEngine:
                 velocity_z=0.06,
                 intensity=0.90,
                 biome_bias="DRAGON_PEAKS",
+                anchor_x=2100.0,
+                anchor_z=-2200.0,
+                max_drift_radius=350.0,
+                base_weather_type="SNOW",
             ),
             # 3. Elf Sylvan Highlands Rain & Mist Front (East)
             RegionalWeatherCell(
@@ -81,6 +94,10 @@ class RegionalWeatherEngine:
                 velocity_z=0.08,
                 intensity=0.85,
                 biome_bias="ELF_HIGHLANDS",
+                anchor_x=2100.0,
+                anchor_z=600.0,
+                max_drift_radius=350.0,
+                base_weather_type="RAIN",
             ),
             # 4. Human Sunlit Plains Clear Cell (South-East)
             RegionalWeatherCell(
@@ -93,6 +110,10 @@ class RegionalWeatherEngine:
                 velocity_z=-0.04,
                 intensity=0.90,
                 biome_bias="HUMAN_PLAINS",
+                anchor_x=1200.0,
+                anchor_z=2000.0,
+                max_drift_radius=350.0,
+                base_weather_type="CLEAR",
             ),
             # 5. Beasthuman Taiga Overcast Squall (South-West)
             RegionalWeatherCell(
@@ -105,6 +126,10 @@ class RegionalWeatherEngine:
                 velocity_z=-0.05,
                 intensity=0.80,
                 biome_bias="BEAST_TAIGA",
+                anchor_x=-2100.0,
+                anchor_z=1800.0,
+                max_drift_radius=350.0,
+                base_weather_type="OVERCAST",
             ),
             # 6. Wandering Ocean Squall Front (Ring 2/3 Drift)
             RegionalWeatherCell(
@@ -117,6 +142,10 @@ class RegionalWeatherEngine:
                 velocity_z=0.10,
                 intensity=0.75,
                 biome_bias="OCEAN_DRIFT",
+                anchor_x=0.0,
+                anchor_z=0.0,
+                max_drift_radius=0.0,
+                base_weather_type="STORM",
             ),
         ]
 
@@ -130,29 +159,51 @@ class RegionalWeatherEngine:
             cell.center_x += cell.velocity_x
             cell.center_z += cell.velocity_z
 
-            # Bounce / wrap within bounds
-            if cell.center_x < WORLD_MIN_X - 500.0:
-                cell.center_x = WORLD_MAX_X + 400.0
-            elif cell.center_x > WORLD_MAX_X + 500.0:
-                cell.center_x = WORLD_MIN_X - 400.0
+            # Keep biome-anchored cells gently oscillating/reflecting within max_drift_radius
+            if cell.max_drift_radius > 0.0:
+                dist_from_anchor = math.hypot(
+                    cell.center_x - cell.anchor_x, cell.center_z - cell.anchor_z
+                )
+                if dist_from_anchor > cell.max_drift_radius:
+                    to_anchor_x = cell.anchor_x - cell.center_x
+                    to_anchor_z = cell.anchor_z - cell.center_z
+                    mag = max(1e-4, math.hypot(to_anchor_x, to_anchor_z))
+                    spd = max(0.04, math.hypot(cell.velocity_x, cell.velocity_z))
+                    cell.velocity_x = (to_anchor_x / mag) * spd
+                    cell.velocity_z = (to_anchor_z / mag) * spd
+                    # Clamp position on boundary
+                    cell.center_x = cell.anchor_x + (cell.center_x - cell.anchor_x) * (
+                        cell.max_drift_radius / dist_from_anchor
+                    )
+                    cell.center_z = cell.anchor_z + (cell.center_z - cell.anchor_z) * (
+                        cell.max_drift_radius / dist_from_anchor
+                    )
+            else:
+                # Bounce / wrap within bounds for free-roaming fronts
+                if cell.center_x < WORLD_MIN_X - 500.0:
+                    cell.center_x = WORLD_MAX_X + 400.0
+                elif cell.center_x > WORLD_MAX_X + 500.0:
+                    cell.center_x = WORLD_MIN_X - 400.0
 
-            if cell.center_z < WORLD_MIN_Z - 500.0:
-                cell.center_z = WORLD_MAX_Z + 400.0
-            elif cell.center_z > WORLD_MAX_Z + 500.0:
-                cell.center_z = WORLD_MIN_Z - 400.0
+                if cell.center_z < WORLD_MIN_Z - 500.0:
+                    cell.center_z = WORLD_MAX_Z + 400.0
+                elif cell.center_z > WORLD_MAX_Z + 500.0:
+                    cell.center_z = WORLD_MIN_Z - 400.0
 
-            # Subtle breathing cycle on radius and intensity
-            breathe = math.sin((current_tick * 0.01) + (hash(cell.cell_id) % 100))
+            # Subtle breathing cycle on radius and intensity with deterministic crc32
+            cell_crc = zlib.crc32(cell.cell_id.encode("utf-8")) % 100
+            breathe = math.sin((current_tick * 0.01) + cell_crc)
             cell.intensity = max(0.4, min(1.0, cell.intensity + breathe * 0.001))
 
-            # Seasonal modulation
+            # Seasonal modulation computed cleanly from base_weather_type (reversible seasons)
+            cell.weather_type = cell.base_weather_type
             if season == "WINTER":
-                if cell.weather_type == "RAIN":
+                if cell.base_weather_type == "RAIN":
                     cell.weather_type = "SNOW"
-                elif cell.weather_type == "OVERCAST" and cell.biome_bias == "BEAST_TAIGA":
+                elif cell.base_weather_type == "OVERCAST" and cell.biome_bias == "BEAST_TAIGA":
                     cell.weather_type = "SNOW"
             elif season == "SUMMER":
-                if cell.weather_type == "SNOW" and cell.biome_bias != "DRAGON_PEAKS":
+                if cell.base_weather_type == "SNOW" and cell.biome_bias != "DRAGON_PEAKS":
                     cell.weather_type = "RAIN"
 
     def sample_weather_at(self, x: float, z: float) -> dict[str, Any]:

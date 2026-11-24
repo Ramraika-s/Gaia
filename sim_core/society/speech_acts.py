@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from sim_core.brains.memory_rag import EpisodicMemoryRecord
 from sim_core.schemas import AgentRecord, SpeechActRecord, SpeechActType
+from sim_core.society.religion import get_agent_devotion, set_agent_devotion
 
 if TYPE_CHECKING:
     from sim_core.engine import SimulationEngine
@@ -37,6 +38,7 @@ class SpeechActEngine:
         self.engine = engine
         self.active_utterances: dict[str, tuple[str, int]] = {}  # agent_id -> (text, expiry_tick)
         self.recent_acts: list[SpeechActRecord] = []
+        self.reported_crimes: set[tuple[str, str | None, int]] = set()
 
     def generate_utterance(
         self,
@@ -169,15 +171,21 @@ class SpeechActEngine:
                 # Mechanical Effect: Alerts Knights/Guards, triggers INTERCEPT_CRIME
                 if listener.profession in ("KNIGHT", "CITY_GUARD", "PALACE_KNIGHT"):
                     listener.activity_state = "INTERCEPT_CRIME"
-                    # Log crime evidence in Judiciary
-                    if self.engine:
-                        self.engine.judiciary.file_case(
-                            accused_id="suspect_unidentified",
-                            offense_type="THEFT",
-                            opened_tick=act.tick,
-                            settlement_id=None,
-                            evidence_score=0.85,
-                        )
+                    # Deduplicate Judiciary case filing:
+                    # file at most once per (speaker, topic, tick // 60)
+                    crime_key = (speaker.agent_id, act.topic, act.tick // 60)
+                    if crime_key not in self.reported_crimes:
+                        self.reported_crimes.add(crime_key)
+                        if len(self.reported_crimes) > 256:
+                            self.reported_crimes.pop()
+                        if self.engine and hasattr(self.engine, "judiciary"):
+                            self.engine.judiciary.file_case(
+                                accused_id="suspect_unidentified",
+                                offense_type="THEFT",
+                                opened_tick=act.tick,
+                                settlement_id=None,
+                                evidence_score=0.85,
+                            )
 
             elif act.act_type == "WARN_PRICE_SPIKE":
                 # Mechanical Effect: Writes episodic memory in listener's MemoryRAGIndex
@@ -208,9 +216,8 @@ class SpeechActEngine:
 
             elif act.act_type == "PRAYER_CALL":
                 # Mechanical Effect: Elevates faith devotion slightly
-                if hasattr(listener, "skills"):
-                    cur_faith = listener.skills.get("faith_devotion", 0.5)
-                    listener.skills["faith_devotion"] = min(1.0, cur_faith + 0.02)
+                cur_dev = get_agent_devotion(listener)
+                set_agent_devotion(listener, cur_dev + 0.02)
 
     def step(self, current_tick: int, agents: list[AgentRecord]) -> None:
         """Clears expired speech utterances and triggers organic chatter."""
@@ -222,6 +229,12 @@ class SpeechActEngine:
             del self.active_utterances[aid]
             if self.engine and aid in self.engine.agents:
                 self.engine.agents[aid].speech_text = ""
+
+        # DEF-T2-04 Part 2: Prune reported_crimes older than 2,000 ticks (O(1) memory)
+        cutoff_bucket = (current_tick - 2000) // 60
+        self.reported_crimes = {
+            crime_key for crime_key in self.reported_crimes if crime_key[2] >= cutoff_bucket
+        }
 
         # 2. Organic Chatter Sample (1-2 pairs per tick among scheduled agents)
         if len(agents) < 2 or not self.engine:

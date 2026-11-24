@@ -72,6 +72,8 @@ func _ready() -> void:
 	_preload_audio()
 	_setup_nodes()
 	_update_camera_mode(true)
+	if avatar_body:
+		_sync_bridge_position(avatar_body.global_position, mode == CameraMode.ORBITAL_RTS, _target_zoom)
 
 
 func _ensure_input_actions() -> void:
@@ -110,7 +112,7 @@ func _setup_nodes() -> void:
 		add_child(avatar_body)
 
 	avatar_body.collision_layer = 2  # God layer
-	avatar_body.collision_mask = 1   # Collides with environment & terrain
+	avatar_body.collision_mask = 5   # Collides with environment/terrain (layer 1) + mortals (layer 4)
 
 	# Set initial position flush with ground
 	TerrainHeightSampler.ensure_loaded()
@@ -145,6 +147,8 @@ func _setup_nodes() -> void:
 		dust_particles = GPUParticles3D.new()
 		dust_particles.name = "DustParticles"
 		avatar_body.add_child(dust_particles)
+		_configure_dust_particles(dust_particles)
+	elif dust_particles.process_material == null:
 		_configure_dust_particles(dust_particles)
 
 	# 5. Footstep & Impact Audio
@@ -247,7 +251,22 @@ func _configure_dust_particles(particles: GPUParticles3D) -> void:
 	particles.draw_pass_1 = quad
 
 
+func _get_ui_state_manager() -> UiStateManager:
+	if UiStateManager.instance != null and is_instance_valid(UiStateManager.instance):
+		return UiStateManager.instance
+	var tree: SceneTree = get_tree()
+	if tree and tree.root:
+		return tree.root.find_child("UiStateManager", true, false) as UiStateManager
+	return null
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	var mgr: UiStateManager = _get_ui_state_manager()
+	var input_blocked: bool = (mgr != null and mgr.is_gameplay_input_blocked())
+	if input_blocked:
+		_is_right_mouse_down = false
+		return
+
 	if event.is_action_pressed("toggle_camera_mode"):
 		_toggle_mode()
 		get_viewport().set_input_as_handled()
@@ -255,7 +274,15 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Flight toggle with F
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_F and mode == CameraMode.THIRD_PERSON_AVATAR:
+		var key_ev: InputEventKey = event as InputEventKey
+		var is_f: bool = (key_ev.keycode == KEY_F or key_ev.physical_keycode == KEY_F)
+		var is_crouch_key: bool = (
+			key_ev.keycode == KEY_CTRL
+			or key_ev.physical_keycode == KEY_CTRL
+			or key_ev.keycode == KEY_C
+			or key_ev.physical_keycode == KEY_C
+		)
+		if is_f and mode == CameraMode.THIRD_PERSON_AVATAR:
 			_is_flying = !_is_flying
 			if _is_flying:
 				_is_crouching = false
@@ -264,7 +291,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			print("[GodCameraController] Divine Flight mode: ", _is_flying)
 			get_viewport().set_input_as_handled()
 			return
-		elif (event.keycode == KEY_CTRL or event.keycode == KEY_C) and mode == CameraMode.THIRD_PERSON_AVATAR:
+		elif is_crouch_key and mode == CameraMode.THIRD_PERSON_AVATAR:
 			if not _is_flying:
 				_is_crouching = !_is_crouching
 			get_viewport().set_input_as_handled()
@@ -275,9 +302,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_RIGHT:
 			_is_right_mouse_down = mb.pressed
 		elif mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			# Click into viewport recaptures mouse if in avatar mode
-			if mode == CameraMode.THIRD_PERSON_AVATAR and not _is_any_ui_open() and not Input.is_key_pressed(KEY_ALT):
-				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			# Click into viewport refreshes cursor mode
+			if mode == CameraMode.THIRD_PERSON_AVATAR and not Input.is_key_pressed(KEY_ALT):
+				if mgr:
+					mgr.request_cursor_mode_refresh(true)
+				else:
+					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			if mode == CameraMode.ORBITAL_RTS:
@@ -301,44 +331,76 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_update_mouse_capture()
+	var mgr: UiStateManager = _get_ui_state_manager()
+	if mgr:
+		mgr.request_cursor_mode_refresh(mode == CameraMode.THIRD_PERSON_AVATAR)
+	else:
+		_update_mouse_capture()
+
+	var input_blocked: bool = (mgr != null and mgr.is_gameplay_input_blocked())
 
 	if mode == CameraMode.THIRD_PERSON_AVATAR:
-		_process_avatar_physics(delta)
+		_process_avatar_physics(delta, input_blocked)
 	else:
-		_process_orbital_pan(delta)
+		if not input_blocked:
+			_process_orbital_pan(delta)
 
 	_update_camera_transform(delta)
 
 
 func _update_mouse_capture() -> void:
-	var is_ui_open: bool = _is_any_ui_open()
-	if mode == CameraMode.THIRD_PERSON_AVATAR and not is_ui_open and not Input.is_key_pressed(KEY_ALT):
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	var mgr: UiStateManager = _get_ui_state_manager()
+	if mgr:
+		mgr.request_cursor_mode_refresh(mode == CameraMode.THIRD_PERSON_AVATAR)
 	else:
-		if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if mode == CameraMode.THIRD_PERSON_AVATAR and not Input.is_key_pressed(KEY_ALT):
+			if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		else:
+			if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
-func _is_any_ui_open() -> bool:
-	var tree = get_tree()
-	if not tree:
-		return false
-	var root = tree.root
-	for path in [
-		"MainWorld/TwoBookModal",
-		"MainWorld/GodConsoleOverlay",
-		"MainWorld/EntityInspector"
-	]:
-		var node = root.get_node_or_null(path)
-		if node and node is CanvasLayer and node.visible:
-			return true
-	return false
-
-
-func _process_avatar_physics(delta: float) -> void:
+func _process_avatar_physics(delta: float, input_blocked: bool = false) -> void:
 	if not avatar_body:
+		return
+
+	if input_blocked:
+		avatar_body.velocity.x = lerpf(avatar_body.velocity.x, 0.0, delta * 14.0)
+		avatar_body.velocity.z = lerpf(avatar_body.velocity.z, 0.0, delta * 14.0)
+		if absf(avatar_body.velocity.x) < 0.01:
+			avatar_body.velocity.x = 0.0
+		if absf(avatar_body.velocity.z) < 0.01:
+			avatar_body.velocity.z = 0.0
+		if not _is_flying:
+			if not avatar_body.is_on_floor():
+				avatar_body.velocity.y -= gravity * delta
+			else:
+				if avatar_body.velocity.y < 0.0:
+					avatar_body.velocity.y = 0.0
+		else:
+			avatar_body.velocity.y = lerpf(avatar_body.velocity.y, 0.0, delta * 8.0)
+			if absf(avatar_body.velocity.y) < 0.01:
+				avatar_body.velocity.y = 0.0
+
+		avatar_body.move_and_slide()
+		var is_floor_now: bool = avatar_body.is_on_floor()
+		if is_floor_now and not _was_on_floor:
+			_trigger_landing_effects()
+		_was_on_floor = is_floor_now
+
+		if avatar_animator:
+			avatar_animator.set_velocity(avatar_body.velocity)
+			if _is_flying:
+				avatar_animator.set_state(HumanoidAnimator.AnimState.FLY)
+			elif not is_floor_now:
+				avatar_animator.set_state(HumanoidAnimator.AnimState.JUMP)
+			elif _is_crouching:
+				avatar_animator.set_state(HumanoidAnimator.AnimState.CROUCH)
+			else:
+				avatar_animator.set_state(HumanoidAnimator.AnimState.IDLE)
+
+		_sync_bridge_position(avatar_body.global_position, false, _target_zoom)
 		return
 
 	# 1. Movement input relative to camera yaw (W=forward, S=backward, D=right, A=left)
@@ -473,12 +535,15 @@ func _play_footstep_sound() -> void:
 		return
 
 	var pos: Vector3 = avatar_body.global_position
-	var is_near_sanctum: bool = pos.distance_to(Vector3.ZERO) < 120.0
-	var pool: Array[AudioStream] = _sfx_grass
+	var road_w: float = TerrainHeightSampler.get_road_weight(pos.x, pos.z)
+	var height: float = pos.y
+	var season_val: float = float(RenderingServer.global_shader_parameter_get("season_progress"))
+	var is_winter: bool = fmod(season_val, 4.0) >= 2.75
 
-	if is_near_sanctum:
+	var pool: Array[AudioStream] = _sfx_grass
+	if road_w > 0.35:
 		pool = _sfx_concrete
-	elif pos.z < -1500.0 and pos.x < -1500.0: # Beasthuman Taiga / Snow
+	elif height > 95.0 or is_winter:
 		pool = _sfx_snow
 
 	if pool.is_empty():
@@ -497,24 +562,25 @@ func _process_orbital_pan(delta: float) -> void:
 
 	var move_dir: Vector3 = Vector3.ZERO
 	if Input.is_key_pressed(KEY_W):
-		move_dir.z -= 1.0
-	if Input.is_key_pressed(KEY_S):
 		move_dir.z += 1.0
+	if Input.is_key_pressed(KEY_S):
+		move_dir.z -= 1.0
 	if Input.is_key_pressed(KEY_A):
 		move_dir.x -= 1.0
 	if Input.is_key_pressed(KEY_D):
 		move_dir.x += 1.0
 
-	var yaw_rad: float = deg_to_rad(_yaw)
-	var forward: Vector3 = Vector3(-sin(yaw_rad), 0.0, -cos(yaw_rad)).normalized()
-	var right: Vector3 = Vector3(cos(yaw_rad), 0.0, -sin(yaw_rad)).normalized()
+	if move_dir.length_squared() > 0.001:
+		var yaw_rad: float = deg_to_rad(_yaw)
+		var forward: Vector3 = Vector3(-sin(yaw_rad), 0.0, -cos(yaw_rad)).normalized()
+		var right: Vector3 = Vector3(cos(yaw_rad), 0.0, -sin(yaw_rad)).normalized()
 
-	var world_move: Vector3 = (right * move_dir.x + forward * move_dir.z).normalized()
-	_orbital_target_pos += world_move * speed * delta
+		var world_move: Vector3 = (right * move_dir.x + forward * move_dir.z).normalized()
+		_orbital_target_pos += world_move * speed * delta
 
-	# Clamp world boundary limits
-	_orbital_target_pos.x = clampf(_orbital_target_pos.x, -4900.0, 4900.0)
-	_orbital_target_pos.z = clampf(_orbital_target_pos.z, -4900.0, 4900.0)
+	# Clamp world boundary limits (8km x 8km world -> [-4000, 4000])
+	_orbital_target_pos.x = clampf(_orbital_target_pos.x, -3950.0, 3950.0)
+	_orbital_target_pos.z = clampf(_orbital_target_pos.z, -3950.0, 3950.0)
 
 	var ground_h: float = TerrainHeightSampler.get_height(_orbital_target_pos.x, _orbital_target_pos.z)
 	_orbital_target_pos.y = ground_h
@@ -576,4 +642,7 @@ func _update_camera_mode(immediate: bool) -> void:
 func _sync_bridge_position(pos: Vector3, is_orbital: bool, zoom: float) -> void:
 	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
 	if bridge and bridge.has_method("update_god_focus"):
-		bridge.update_god_focus(pos, is_orbital, zoom)
+		var ground_h: float = TerrainHeightSampler.get_height(pos.x, pos.z)
+		var cam_y: float = camera.global_position.y if (camera and camera.is_inside_tree()) else (pos.y + zoom)
+		var real_altitude: float = maxf(0.0, cam_y - ground_h)
+		bridge.update_god_focus(pos, is_orbital, real_altitude)

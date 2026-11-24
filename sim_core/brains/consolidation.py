@@ -28,6 +28,7 @@ from sim_core.brains.profession_nets import PROFESSIONS, ProfessionNetRegistry
 from sim_core.resilience.healer import ErrorHealer
 
 if TYPE_CHECKING:
+    from sim_core.brains.action_bridge import ProfessionRolloutBuffer
     from sim_core.schemas import AgentRecord, DivineEntityRecord
 
 logger = logging.getLogger(__name__)
@@ -53,10 +54,13 @@ class SleepCycleConsolidator:
         learning_rate: float = 1e-3,
         max_grad_norm: float = 1.0,
         inject_nan_for_test: bool = False,
+        rollout_buffer: ProfessionRolloutBuffer | None = None,
     ) -> dict[str, dict[str, Any]]:
         """
         Aggregates high-reward rollouts from Lv. 6+ practitioners per profession,
         performing stability-gated gradient updates on that profession's MLP.
+        If real rollouts exist in rollout_buffer, trains on real transitions;
+        otherwise falls back to practitioner feature builder.
         If NaN is detected or validation loss regresses, rolls back immediately.
         """
         agent_list = list(agents.values()) if isinstance(agents, dict) else agents
@@ -71,7 +75,8 @@ class SleepCycleConsolidator:
                     high_level_by_prof[prof].append(a)
 
         for prof, practitioners in high_level_by_prof.items():
-            if not practitioners:
+            rollouts = rollout_buffer.get_rollouts(prof) if rollout_buffer is not None else []
+            if not practitioners and not rollouts:
                 results[prof] = {"status": "SKIPPED_NO_PRACTITIONERS", "practitioners_count": 0}
                 continue
 
@@ -79,45 +84,55 @@ class SleepCycleConsolidator:
             profession_registry.snapshot_weights(prof)
 
             try:
-                # Prepare training data from practitioners
+                # Prepare training data from rollouts or practitioners
                 x_list = []
                 lvl_list = []
                 target_action_logits = []
 
-                for p_agent in practitioners:
-                    # Construct feature vector
-                    base_features = [0.1] * 20
-                    base_features[0] = getattr(p_agent, "hunger", 100.0) / 100.0
-                    base_features[1] = getattr(p_agent, "stamina", 100.0) / 100.0
-                    base_features[2] = getattr(p_agent, "hygiene", 1.0)
-                    base_features[3] = getattr(p_agent, "fatigue", 0.0)
+                if rollouts:
+                    for trans in rollouts:
+                        x_list.append(trans.features)
+                        lvl_list.append([float(trans.level)])
+                        target_l = np.zeros(net.action_dim, dtype=np.float32)
+                        target_l[trans.action_idx] = float(2.0 * max(0.5, trans.reward))
+                        target_action_logits.append(target_l)
+                else:
+                    for p_agent in practitioners:
+                        # Construct feature vector
+                        base_features = [0.1] * 20
+                        base_features[0] = getattr(p_agent, "hunger", 100.0) / 100.0
+                        base_features[1] = getattr(p_agent, "stamina", 100.0) / 100.0
+                        base_features[2] = getattr(p_agent, "hygiene", 1.0)
+                        base_features[3] = getattr(p_agent, "fatigue", 0.0)
 
-                    feats = profession_registry.pack_profession_features(
-                        base_living_features=base_features,
-                        level=getattr(p_agent, "profession_level", 6),
-                        xp=getattr(p_agent, "profession_xp", 500.0),
-                        active_mechanical_effects=getattr(p_agent, "active_mechanical_effects", {}),
-                    )
-                    x_list.append(feats)
-                    lvl_list.append([float(getattr(p_agent, "profession_level", 6))])
+                        feats = profession_registry.pack_profession_features(
+                            base_living_features=base_features,
+                            level=getattr(p_agent, "profession_level", 6),
+                            xp=getattr(p_agent, "profession_xp", 500.0),
+                            active_mechanical_effects=getattr(
+                                p_agent, "active_mechanical_effects", {}
+                            ),
+                        )
+                        x_list.append(feats)
+                        lvl_list.append([float(getattr(p_agent, "profession_level", 6))])
 
-                    # Target: encourage specialized actions based on profession
-                    target_l = np.zeros(net.action_dim, dtype=np.float32)
-                    if prof == "KNIGHT":
-                        target_l[10] = 2.0  # CONFRONT / DEFEND
-                        target_l[3] = 0.5  # EVADE
-                    elif prof == "SCHOLAR":
-                        target_l[6] = 2.5  # STUDY
-                    elif prof == "FARMER":
-                        target_l[7] = 2.0  # CRAFT / WORK
-                    elif prof == "MERCHANT":
-                        target_l[8] = 2.2  # TRADE
-                    elif prof == "CLERIC":
-                        target_l[9] = 2.5  # PRAY
-                    else:
-                        target_l[7] = 1.0
+                        # Target: encourage specialized actions based on profession
+                        target_l = np.zeros(net.action_dim, dtype=np.float32)
+                        if prof == "KNIGHT":
+                            target_l[10] = 2.0  # CONFRONT / DEFEND
+                            target_l[3] = 0.5  # EVADE
+                        elif prof == "SCHOLAR":
+                            target_l[6] = 2.5  # STUDY
+                        elif prof == "FARMER":
+                            target_l[7] = 2.0  # CRAFT / WORK
+                        elif prof == "MERCHANT":
+                            target_l[8] = 2.2  # TRADE
+                        elif prof == "CLERIC":
+                            target_l[9] = 2.5  # PRAY
+                        else:
+                            target_l[7] = 1.0
 
-                    target_action_logits.append(target_l)
+                        target_action_logits.append(target_l)
 
                 x_t = torch.tensor(x_list, dtype=torch.float32, device=profession_registry.device)
                 lvl_t = torch.tensor(
@@ -145,6 +160,8 @@ class SleepCycleConsolidator:
                 )
                 if has_nan:
                     profession_registry.rollback_weights(prof)
+                    if rollout_buffer is not None:
+                        rollout_buffer.clear(prof)
                     results[prof] = {
                         "status": "ROLLED_BACK_NAN_DETECTED",
                         "practitioners_count": len(practitioners),
@@ -168,6 +185,8 @@ class SleepCycleConsolidator:
                 )
                 if has_nan_post:
                     profession_registry.rollback_weights(prof)
+                    if rollout_buffer is not None:
+                        rollout_buffer.clear(prof)
                     results[prof] = {
                         "status": "ROLLED_BACK_POST_STEP_NAN",
                         "practitioners_count": len(practitioners),
@@ -181,6 +200,8 @@ class SleepCycleConsolidator:
 
                 if post_loss > (init_loss * 2.5) and init_loss > 1e-4:
                     profession_registry.rollback_weights(prof)
+                    if rollout_buffer is not None:
+                        rollout_buffer.clear(prof)
                     results[prof] = {
                         "status": "ROLLED_BACK_LOSS_REGRESSION",
                         "init_loss": init_loss,
@@ -188,6 +209,9 @@ class SleepCycleConsolidator:
                         "practitioners_count": len(practitioners),
                     }
                     continue
+
+                if rollout_buffer is not None and rollouts:
+                    rollout_buffer.clear(prof)
 
                 results[prof] = {
                     "status": "UPDATED_SUCCESS",
@@ -199,6 +223,8 @@ class SleepCycleConsolidator:
             except Exception as e:
                 logger.error(f"Error consolidating profession {prof}: {e}")
                 profession_registry.rollback_weights(prof)
+                if rollout_buffer is not None:
+                    rollout_buffer.clear(prof)
                 if self.healer:
                     self.healer.handle(
                         fault_class="AGENT_REPEAT_FAULT",

@@ -4,7 +4,7 @@
 [![uv](https://img.shields.io/badge/toolchain-uv-blueviolet.svg)](https://github.com/astral-sh/uv)
 [![Godot 4.7.2](https://img.shields.io/badge/godot-4.7.2-478cbf.svg)](https://godotengine.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests Passing](https://img.shields.io/badge/pytest-109%20passed-success.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/pytest-182%20passed-success.svg)](tests/)
 
 **Gaia v4.0** is a persistent, local-first, stylized anime-fantasy AI civilization simulation with **no hard population cap**, scaling organically from initial founders to **10,000+ autonomous neural-network agents** across **5 distinct races** (`HUMAN`, `ELF`, `DRAGON`, `BEASTHUMAN` with 4 sub-lineages, and `DEMON`) and **2 biological genders** (`BOY` / `GIRL`).
 
@@ -79,7 +79,7 @@ The entire civilization runs natively on **Fedora Linux 45** (KDE Plasma on Wayl
    - **Tier 2 (`ProfessionNetRegistry`):** 10 distinct professions (`KNIGHT`, `CITY_GUARD`, `FARMER`, `MERCHANT`, `BLACKSMITH`, `BUILDER`, `SCHOLAR`, `CLERIC`, `HUNTER`, `CITIZEN`) scaling from Apprentice (Lv. 1) to Grandmaster (Lv. 10) driven by book knowledge.
    - **Tier 3 (`BatchedAgentSelfNet`):** Contiguous `2,048`-slot dynamically grown PyTorch slab tensors (`torch.bmm` + manual `GRUCell` working memory, executing 10,000 agents in **~15.0 ms** on CPU with **under 235 MB RAM**).
 2. **8 Semantic Speech Acts:** `GREET`, `WARN_PRICE_SPIKE`, `TRADE_OFFER`, `SHARE_BOOK_LORE`, `REPORT_CRIME`, `PRAYER_CALL`, `COURT`, `POLITICAL_DEBATE` over physical 8m acoustic radius with short diegetic utterances.
-3. **10-D Personality & Mood:** `caution`, `sociability`, `ambition`, `loyalty`, `rule_respect`, `faith_devotion`, `curiosity`, `aggression`, `frugality`, `compassion` coupled with dynamic `MoodState` (`joy`, `anger`, `fear`, `gloom`, `calm`) modulating action logits.
+3. **10-D Personality & Mood:** Canonical 10-D `PersonalityVector` (`courage`, `empathy`, `ambition`, `discipline`, `curiosity`, `devotion`, `honesty`, `out_group_trust`, `caution`, `pride`) coupled with dynamic `MoodState` (`calm`, `angry`, `grieving`, `fearful`, `inspired`) modulating action logits via a vectorized linear projection matrix.
 4. **Grounded Memory RAG & Consolidation:** `MemoryRAGIndex` enforcing strict `known_books` information asymmetry (mortals only know books they or their mentors read), paired with `SleepCycleConsolidator` stabilizing neural plasticity during sleep.
 
 ### 3. Concentric 4-Ring World Geography (`8km × 8km`)
@@ -137,7 +137,7 @@ bash scripts/setup_uv_env.sh
 # 3. Verify environment
 uv run python --version   # Must output Python 3.12.x
 uv run ruff check sim_core tests scripts
-uv run pytest --tb=short -q  # Runs all 109 unit & regression tests
+uv run pytest --tb=short -q  # Runs all 182 unit & regression tests
 ```
 
 ### 2. Launching the Simulation
@@ -161,6 +161,12 @@ uv run python scripts/launch_gaia.py --agents 1500 --no-llm
 uv run python scripts/launch_gaia.py --agents 1500 --headless --max-ticks 1200 --speed 20.0
 ```
 
+#### Option D: Fresh World Initialization
+```bash
+# Wipes existing /tmp or persistent DB checkpoints for a clean Day 0 boot:
+uv run python scripts/launch_gaia.py --agents 1500 --fresh
+```
+
 ### 3. Knowledge Foundry Workflow
 
 ```bash
@@ -170,14 +176,15 @@ uv run python scripts/celestial_ingest.py \
   --subject agriculture_and_botany \
   --author "Master Agronomist"
 
-# 2. Audit all staged packs using the 3-Stage Deduplication Engine:
+# 2. Audit all staged packs using the 3-Stage Deduplication Engine (or target a single pack):
 uv run python scripts/knowledge_review.py
+uv run python scripts/knowledge_review.py --pack staged_packs/sample_pack.json --archive-dir knowledge_foundry/archived_packs
 
 # 3. Test merge in dry-run mode (zero database changes):
 uv run python scripts/knowledge_merge.py --dry-run
 
 # 4. Atomically merge verified packs into the live World Library:
-uv run python scripts/knowledge_merge.py --commit
+uv run python scripts/knowledge_merge.py --commit --archive-dir knowledge_foundry/archived_packs
 ```
 
 ### 4. Running Benchmarks & Soak Tests
@@ -185,6 +192,7 @@ uv run python scripts/knowledge_merge.py --commit
 ```bash
 # 10,000-Agent Slab-Grown Neural Tensor Forward-Pass Benchmark (< 25 ms/step on CPU):
 uv run python -m sim_core.tools.bench_tensors --agents 10000 --steps 50
+uv run python -m sim_core.tools.bench_tensors --agents 10000 --steps 50 --legacy-2tier
 
 # 1,500-Agent 5-Race Headless Soak Test + Double-Entry Conservation & Atomic Rewind Check:
 uv run python -m sim_core.tools.soak_test --ticks 600 --agents 1500 --verify-atomic-rewind
@@ -205,13 +213,18 @@ When the Godot 4.7.2 client is active:
 | `Ctrl` or `C` | Crouch / Descend | Ground: Smooth capsule crouch (`1.1m`); Flight: Descends vertically |
 | `F` | Toggle Divine Flight | Toggles flight physics on/off in 3rd-person Avatar mode |
 | `Alt` (Hold) | Release Mouse Capture | Unlocks mouse cursor to click on-screen buttons or HUD |
-| `Left-Click` | Interact / Recapture | Clicks UI buttons, inspects mortals, or re-captures mouse look |
+| `Left-Click` | Interact / Recapture | Clicks UI buttons, inspects mortals/buildings, or re-captures mouse look |
+| `Left-Click` (Target) | Entity Inspector | Opens [EntityInspector](godot_client/scripts/ui/entity_inspector.gd) (Vitals, Traits, Inventory, Bless, Curse) |
+| `Esc` | Close Active Modal | Dismisses current open modal via [UiStateManager](godot_client/scripts/ui/ui_state_manager.gd) |
 | `Right-Click` (Hold)| Orbit Camera | Rotates view angle around focus target in Orbital RTS Mode |
 | `Mouse Wheel` | Camera Zoom | Zooms spring-arm in 3rd-person (`2.5–15m`) or RTS altitude (`20–800m`) |
 | `E` | Context Interaction | Talks to nearby Deity/Mortal ([DialogueModal](godot_client/scripts/ui/dialogue_modal.gd)) or interacts with Library Lectern |
 | `L` | Two-Book Governance Modal | Opens [TwoBookModal](godot_client/scripts/ui/two_book_modal.gd) (World Library & Divine Codex tabs) |
 | `B` | Toggle Parcel Borders | Toggles visual `16×16m` parcel chunk grid & color-coded polity borders |
 | `` ` `` (Backtick) / `F1` | In-Game God Console | Toggles [GodConsoleOverlay](godot_client/scripts/ui/god_console_overlay.gd) command prompt |
+
+> [!NOTE]
+> All in-game UI modals are coordinated exclusively through [UiStateManager](godot_client/scripts/ui/ui_state_manager.gd), guaranteeing mouse capture/release consistency, preventing overlapping popups, and providing clean `[Esc]` dismissal across all screens.
 
 ---
 
@@ -237,5 +250,7 @@ For comprehensive technical specifications, refer to [docs/INDEX.md](docs/INDEX.
 - **Roadmap & Guides:**
   - [Implementation Roadmap & Milestones](docs/roadmap/IMPLEMENTATION_ROADMAP.md)
   - [Player & Operator Handbook](docs/guides/PLAYER_AND_OPERATOR_GUIDE.md)
+  - [Local LLM Installation Guide (llama.cpp)](docs/guides/llama_cpp_install_guide.md)
+  - [Local LLM Execution Guide (llama-server)](docs/guides/llama_cpp_run_guide.md)
   - [Knowledge Foundry Authoring Rules](knowledge_foundry/AGENTS.md)
   - [Knowledge Deduplication Playbook](knowledge_foundry/DEDUPE_AND_REVIEW_PLAYBOOK.md)

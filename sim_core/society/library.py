@@ -31,12 +31,14 @@ class TwoBookGovernanceEngine:
     """
     Manages both World Library and Divine Codex with strict RBAC:
     - world_library: readable by everyone; edited by God, Goddess+1 Daughter,
-      3/4 Daughters alone, or mortals passing Elders (>50%) and God-Mothers review.
+      >= 3/5 Daughters alone (>50%), or mortals passing Elders (>50%) and God-Mothers review.
     - divine_codex: readable by everyone; Option B split authority where only God
-      can write/apply engine parameter overrides (proposed by Goddess or 4/4 Daughters).
+      can write/apply engine parameter overrides (proposed by Goddess or 5/5 Daughters unanimously).
     """
 
-    def __init__(self):
+    def __init__(self, defer_mortal_exports: bool = False):
+        self.defer_mortal_exports: bool = defer_mortal_exports
+
         # World Library storage
         self.library_entries: dict[str, WorldLibraryEntry | KnowledgeEntry] = {}
         self.library_proposals: dict[str, LibraryProposalRecord] = {}
@@ -47,6 +49,9 @@ class TwoBookGovernanceEngine:
 
         # Live engine parameter overrides applied via Divine Codex
         self.live_engine_overrides: dict[str, Any] = {}
+
+        # Pending mortal book exports
+        self.pending_mortal_exports: list[WorldLibraryEntry] = []
 
     # =========================================================================
     # 1. World Library Governance (world_library)
@@ -248,8 +253,50 @@ class TwoBookGovernanceEngine:
             distinct_from=prop.distinct_from,
         )
         self.library_entries[entry_id] = entry
-        self._export_mortal_authored_entry(entry)
+        if entry.author_type == "MORTAL":
+            self.pending_mortal_exports.append(entry)
+            if not self.defer_mortal_exports:
+                self._export_mortal_authored_entry(entry)
         return entry
+
+    def flush_mortal_exports(self, export_dir: Path | None = None) -> list[Path]:
+        """Flushes pending mortal-authored entries to disk as KnowledgePacks."""
+        target_dir = export_dir or Path("data/knowledge/_mortal_authored")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        written_paths: list[Path] = []
+        for entry in self.pending_mortal_exports:
+            filename = f"scribe_{entry.author_id}_{entry.entry_id}.json"
+            out_file = target_dir / filename
+            pack_data = {
+                "pack_id": f"mortal_pack_{entry.entry_id}",
+                "entries": [
+                    {
+                        "entry_id": entry.entry_id,
+                        "subject": entry.subject or "law_and_governance",
+                        "target_section": entry.section or "general",
+                        "fact_key": (
+                            entry.fact_key
+                            or f"{entry.subject or 'law_and_governance'}.topic.{entry.entry_id}"
+                        ),
+                        "title": entry.title,
+                        "summary": entry.summary,
+                        "body": entry.body or entry.summary,
+                        "author": entry.author_id,
+                        "author_type": "MORTAL",
+                        "era_tier": 1,
+                        "tags": entry.tags or ["mortal_authored"],
+                        "prerequisites": [],
+                        "mechanical_effects": entry.mechanical_effects,
+                        "supersedes": entry.supersedes,
+                        "distinct_from": entry.distinct_from,
+                    }
+                ],
+            }
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(pack_data, f, indent=2)
+            written_paths.append(out_file)
+        self.pending_mortal_exports.clear()
+        return written_paths
 
     def _export_mortal_authored_entry(self, entry: WorldLibraryEntry) -> None:
         """Exports approved mortal-authored books to data/knowledge/_mortal_authored/."""
@@ -354,7 +401,7 @@ class TwoBookGovernanceEngine:
                 prop.status = "OBJECTION_WINDOW"
         else:
             prop.godmother_objections.append(godmother_slot)
-            # Check if >= 3/4 Daughters objected (>50% objections)
+            # Check if >= 3/5 Daughters objected (>50% objections)
             if len(prop.godmother_objections) >= 3:
                 prop.status = "BLOCKED_BY_DAUGHTERS"
                 return True, "BLOCKED_BY_DAUGHTERS"
@@ -508,7 +555,9 @@ class TwoBookGovernanceEngine:
             "gm_beasthuman",
             "gm_demon",
         }
-        unique_approvals: list[DeitySlot] = [d for d in daughter_approvals if d in valid_daughters]
+        unique_approvals: list[DeitySlot] = list(
+            dict.fromkeys(d for d in daughter_approvals if d in valid_daughters)
+        )
 
         if len(unique_approvals) < 3:
             return (
@@ -548,7 +597,7 @@ class TwoBookGovernanceEngine:
     ) -> tuple[bool, str, DivineCodexProposalRecord | None]:
         """
         Submits an engine parameter override proposal to God (Admin).
-        Proposer must be World Goddess (alone) OR all 4 Daughters unanimously (4/4).
+        Proposer must be World Goddess (alone) OR all 5 Daughters unanimously (5/5).
         """
         valid_daughters = {"gm_human", "gm_elf", "gm_dragon", "gm_beasthuman", "gm_demon"}
 

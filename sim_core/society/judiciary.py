@@ -44,6 +44,7 @@ class JudiciaryEngine:
             "ELF": 0,
             "DRAGON": 0,
             "BEASTHUMAN": 0,
+            "DEMON": 0,
         }
 
     @property

@@ -13,10 +13,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 import sys
 from pathlib import Path
-from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -26,71 +24,15 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from sim_core.knowledge.db_loader import (
+    collect_staged_packs,
+    count_pack_entries,
+    load_library_from_db,
+)
 from sim_core.knowledge.dedupe import DeduplicationEngine
 
 
-def load_library_from_db(db_path: Path) -> list[dict[str, Any]]:
-    """Loads existing world_library entries from SQLite if database exists."""
-    if not db_path.exists():
-        return []
-
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='world_library';"
-        )
-        if not cursor.fetchone():
-            conn.close()
-            return []
-
-        cursor.execute(
-            "SELECT entry_id, topic, title, summary, author_id, author_proficiency, "
-            "skill_bonus, is_scripture, read_count, created_tick FROM world_library;"
-        )
-        rows = cursor.fetchall()
-        entries = []
-        for r in rows:
-            entries.append(
-                {
-                    "entry_id": r[0],
-                    "subject": r[1],
-                    "topic": r[1],
-                    "fact_key": r[1],
-                    "title": r[2],
-                    "summary": r[3],
-                    "body": r[3],
-                    "author": r[4],
-                    "author_id": r[4],
-                    "author_type": "DIVINE" if r[7] == 1 else "MORTAL",
-                    "mechanical_effects": {"skill_bonus": float(r[6])},
-                    "supersedes": [],
-                    "distinct_from": [],
-                }
-            )
-        conn.close()
-        return entries
-    except Exception as ex:
-        print(f"Warning: Could not read existing library from {db_path}: {ex}", file=sys.stderr)
-        return []
-
-
-def collect_staged_packs(knowledge_dir: Path) -> list[Path]:
-    """Collects all .json files in knowledge_dir, skipping directories starting with '_'."""
-    packs = []
-    if not knowledge_dir.exists():
-        return packs
-
-    for p in sorted(knowledge_dir.rglob("*.json")):
-        # Skip if any parent part relative to knowledge_dir starts with '_'
-        rel_parts = p.relative_to(knowledge_dir).parts
-        if any(part.startswith("_") for part in rel_parts[:-1]):
-            continue
-        packs.append(p)
-    return packs
-
-
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Gaia v4.0 Knowledge Foundry Pre-Merge Review CLI")
     parser.add_argument(
         "--knowledge-dir",
@@ -115,8 +57,14 @@ def main() -> int:
         action="store_true",
         help="Fail on near-duplicate warnings (0.78-0.87 similarity)",
     )
+    parser.add_argument(
+        "--pack",
+        type=Path,
+        default=None,
+        help="Optional specific pack file to review",
+    )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     console = Console()
 
     console.print(
@@ -127,13 +75,34 @@ def main() -> int:
         )
     )
 
-    packs = collect_staged_packs(args.knowledge_dir)
+    packs = collect_staged_packs(args.knowledge_dir, pack_path=args.pack)
     if not packs:
         console.print(f"[yellow]No staged packs found in {args.knowledge_dir}[/yellow]")
         return 0
 
     existing_entries = load_library_from_db(args.db_path)
     engine = DeduplicationEngine(existing_entries)
+
+    # Register entries from other staged packs in knowledge_dir to catch cross-pack duplicates
+    if args.pack:
+        target_path = args.pack.resolve()
+        sibling_packs = [
+            p for p in collect_staged_packs(args.knowledge_dir)
+            if p.resolve() != target_path
+        ]
+        for sib in sibling_packs:
+            try:
+                with open(sib, encoding="utf-8") as f:
+                    sib_data = json.load(f)
+                sib_entries = (
+                    sib_data.get("entries", [])
+                    if isinstance(sib_data, dict)
+                    else (sib_data if isinstance(sib_data, list) else [])
+                )
+                for entry_dict in sib_entries:
+                    engine._register_existing(entry_dict)
+            except Exception:
+                pass
 
     report = engine.audit_packs(packs, strict_near_dupes=args.strict)
 
@@ -159,12 +128,12 @@ def main() -> int:
         else:
             status = "[bold green]PASS[/bold green]"
 
+        cnt = count_pack_entries(p)
         try:
-            with open(p, encoding="utf-8") as f:
-                cnt = len(json.load(f))
-        except Exception:
-            cnt = 0
-        packs_table.add_row(str(p.relative_to(args.knowledge_dir)), str(cnt), status)
+            rel_label = str(p.relative_to(args.knowledge_dir))
+        except ValueError:
+            rel_label = str(p)
+        packs_table.add_row(rel_label, str(cnt), status)
 
     console.print(packs_table)
 

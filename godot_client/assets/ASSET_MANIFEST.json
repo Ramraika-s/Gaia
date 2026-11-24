@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Master asset mapping for Gaia Civilization Engine Godot 4.7.2 client",
   "deities": {
     "god_avatar": "res://assets/deities/god_avatar.vrm",
@@ -48,7 +48,6 @@
     "particles": "res://assets/vfx/particles/",
     "audio_rpg": "res://assets/audio/rpg/",
     "audio_impacts": "res://assets/audio/impacts/",
-    "audio_ui": "res://assets/audio/ui/",
-    "audio_voice": "res://assets/audio/voice/"
+    "audio_ui": "res://assets/audio/ui/"
   }
 }

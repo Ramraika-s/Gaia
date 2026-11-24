@@ -44,6 +44,12 @@ Gaia v4.0 implements a strictly closed-loop, macro-financially conservative econ
   - If a borrower misses 3 consecutive payment windows, the loan enters `DEFAULTED` status.
   - The World Bank executes immediate collateral seizure: frozen accounts, forfeiture of owned $16\text{m} \times 16\text{m}$ parcels to the bank, and a `DEBT_DEFAULT` case opened in the Judiciary.
 
+### 2.3 Strict Double-Entry Conservation Invariant
+- **Zero-Drift Invariant:** The World Bank is the sole monetary issuer. Every single transfer—whether purchasing goods, paying allowances, transferring rent, buying buildings, or settling probate—is an atomic debit from `sender` and credit to `receiver`.
+- **System-Wide Balance Check:**
+  $$\text{Total Money Supply} = \text{World Bank Reserves} + \sum_{i} \text{Agent}_i.\text{credits} + \sum_{s} \text{Treasury}_s.\text{credits} \equiv M_0$$
+  This balance is verified at every civic tick and daily commit with exact **0.000000 drift tolerance**. Any discrepancy instantly aborts the commit and triggers `ErrorHealer` transaction rollback.
+
 ---
 
 ## 3. World Trade Centre (WTC) & Real Inflation (`sim_core/society/wtc_market.py`)

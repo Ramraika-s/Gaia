@@ -21,13 +21,14 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from sim_core.knowledge.dedupe import DeduplicationEngine  # noqa: E402
+from sim_core.knowledge.db_loader import collect_staged_packs, load_library_from_db  # noqa: E402
+from sim_core.knowledge.dedupe import audit_single_entry  # noqa: E402
 from sim_core.knowledge.schema import (  # noqa: E402
     CANONICAL_SUBJECTS,
     KnowledgeEntry,
@@ -215,7 +216,13 @@ def extract_with_llm(
     }
 
     try:
-        url = f"{llm_url.rstrip('/')}/chat/completions"
+        clean_url = llm_url.rstrip("/")
+        if clean_url.endswith("/chat/completions"):
+            url = clean_url
+        elif clean_url.endswith("/v1"):
+            url = f"{clean_url}/chat/completions"
+        else:
+            url = f"{clean_url}/v1/chat/completions"
         req = urllib.request.Request(
             url,
             data=json.dumps(req_payload).encode("utf-8"),
@@ -284,6 +291,8 @@ def run_ingest(
     max_entries: int = 15,
     era_tier: int = 1,
     author: str = "Celestial Scribe",
+    db_path: Path | str = Path("data/civilization.db"),
+    knowledge_dir: Path | str = Path("data/knowledge"),
 ) -> KnowledgePack:
     """Executes celestial lore harvest, deduplication, and JSON pack generation."""
     if not input_path.exists():
@@ -304,8 +313,28 @@ def run_ingest(
     if not candidates:
         raise RuntimeError("No valid knowledge entries could be extracted from input text.")
 
-    # Deduplication and audit
-    dedupe_engine = DeduplicationEngine()
+    # Load existing entries from both SQLite world_library and staged packs
+    db_p = Path(db_path)
+    kdir_p = Path(knowledge_dir)
+    existing_entries: list[dict[str, Any]] = []
+    if db_p.exists():
+        existing_entries.extend(load_library_from_db(db_p))
+
+    if kdir_p.exists():
+        for p in collect_staged_packs(kdir_p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    p_data = json.load(f)
+                if isinstance(p_data, list):
+                    existing_entries.extend(p_data)
+                elif isinstance(p_data, dict):
+                    entries_list = p_data.get("entries", [])
+                    if isinstance(entries_list, list):
+                        existing_entries.extend(entries_list)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    pool: list[Any] = list(existing_entries)
     accepted_entries: list[KnowledgeEntry] = []
     seen_ids: set[str] = set()
     seen_keys: set[str] = set()
@@ -314,18 +343,21 @@ def run_ingest(
         if entry.entry_id in seen_ids or entry.fact_key in seen_keys:
             continue
 
-        # Audit against already accepted entries
-        is_dup = False
-        for existing in accepted_entries:
-            sim = dedupe_engine.compute_lexical_similarity(entry, existing)
-            if sim >= 0.82:
-                is_dup = True
-                break
+        # Run 3-Stage deduplication cascade against DB + staged + previously accepted
+        is_valid, reason, _ = audit_single_entry(entry, pool)
+        if not is_valid:
+            continue
 
-        if not is_dup:
-            accepted_entries.append(entry)
-            seen_ids.add(entry.entry_id)
-            seen_keys.add(entry.fact_key)
+        accepted_entries.append(entry)
+        seen_ids.add(entry.entry_id)
+        seen_keys.add(entry.fact_key)
+        pool.append(entry.model_dump())
+
+    if not accepted_entries:
+        raise ValueError(
+            "All candidate entries were rejected as duplicates or conflicts "
+            "against existing knowledge."
+        )
 
     pack_name = f"pack_{subject}_{sanitize_snake_id(input_path.stem, 24)}"
     pack = KnowledgePack(
@@ -354,7 +386,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output", "-o", type=Path, default=None,
-        help="Output JSON pack path (default: data/knowledge/staged/<pack_name>.json)",
+        help="Output JSON pack path",
     )
     parser.add_argument(
         "--use-llm",
@@ -377,6 +409,18 @@ def main() -> None:
     parser.add_argument(
         "--author", type=str, default="Celestial Scribe", help="Author attribution"
     )
+    parser.add_argument(
+        "--db-path",
+        type=Path,
+        default=Path("data/civilization.db"),
+        help="Path to SQLite civilization database (default: data/civilization.db)",
+    )
+    parser.add_argument(
+        "--knowledge-dir",
+        type=Path,
+        default=Path("data/knowledge"),
+        help="Root staged knowledge directory (default: data/knowledge)",
+    )
 
     args = parser.parse_args()
 
@@ -386,20 +430,26 @@ def main() -> None:
             REPO_ROOT
             / "data"
             / "knowledge"
-            / "staged"
-            / f"pack_{args.subject}_{args.input.stem}.json"
+            / args.subject
+            / f"pack_{args.subject}_{sanitize_snake_id(args.input.stem, 24)}.json"
         )
 
-    pack = run_ingest(
-        input_path=args.input,
-        subject=cast(SubjectLiteral, args.subject),
-        output_path=out_file,
-        use_llm=args.use_llm,
-        llm_url=args.llm_url,
-        max_entries=args.max_entries,
-        era_tier=args.era_tier,
-        author=args.author,
-    )
+    try:
+        pack = run_ingest(
+            input_path=args.input,
+            subject=cast(SubjectLiteral, args.subject),
+            output_path=out_file,
+            use_llm=args.use_llm,
+            llm_url=args.llm_url,
+            max_entries=args.max_entries,
+            era_tier=args.era_tier,
+            author=args.author,
+            db_path=args.db_path,
+            knowledge_dir=args.knowledge_dir,
+        )
+    except ValueError as ex:
+        print(f"\n[Celestial Lore Harvester Error] {ex}", file=sys.stderr)
+        sys.exit(1)
 
     print(
         f"\n[Celestial Lore Harvester] Successfully generated pack '{pack.pack_id}' "
@@ -407,8 +457,17 @@ def main() -> None:
     )
     print(f"Saved to: {out_file}")
     print("\nNext Review & Merge Steps:")
-    print(f"  1. Review: uv run python scripts/knowledge_review.py --pack {out_file}")
-    print(f"  2. Commit: uv run python scripts/knowledge_merge.py --pack {out_file} --commit\n")
+    extra_flags: list[str] = []
+    if args.db_path != Path("data/civilization.db"):
+        extra_flags.append(f"--db-path {args.db_path}")
+    if args.knowledge_dir != Path("data/knowledge"):
+        extra_flags.append(f"--knowledge-dir {args.knowledge_dir}")
+    flags_str = f" {' '.join(extra_flags)}" if extra_flags else ""
+    print(f"  1. Review: uv run python scripts/knowledge_review.py --pack {out_file}{flags_str}")
+    print(
+        f"  2. Commit: uv run python scripts/knowledge_merge.py --pack {out_file} "
+        f"--commit{flags_str}\n"
+    )
 
 
 if __name__ == "__main__":

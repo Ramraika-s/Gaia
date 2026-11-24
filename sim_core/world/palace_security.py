@@ -11,6 +11,8 @@ import math
 import uuid
 from typing import TYPE_CHECKING, Final, Literal
 
+from sim_core.brains.personality import MoodState, generate_personality_vector
+from sim_core.config import TICKS_PER_GAME_DAY
 from sim_core.schemas import (
     AgentRecord,
     PalaceDecision,
@@ -18,6 +20,7 @@ from sim_core.schemas import (
     PalacePass,
     Vec3,
 )
+from sim_core.society.religion import get_agent_devotion
 
 if TYPE_CHECKING:
     from sim_core.bridge.base import WorldAdapter
@@ -192,15 +195,17 @@ class PalaceSecurityEngine:
         if self.judiciary and agent.agent_id in self.judiciary.criminal_records:
             crimes = len(self.judiciary.criminal_records[agent.agent_id])
 
-        # Devotion affinity
-        devotion = 0.5
+        # Devotion affinity combining base devotion with patron affinity cleanly
+        base_devotion = get_agent_devotion(agent)
+        patron_affinity = 0.5
         if (
             agent.patron_godmother_slot
             and agent.patron_godmother_slot in agent.godmother_affinities
         ):
-            devotion = agent.godmother_affinities[agent.patron_godmother_slot]
+            patron_affinity = agent.godmother_affinities[agent.patron_godmother_slot]
         elif "world_goddess" in agent.godmother_affinities:
-            devotion = agent.godmother_affinities["world_goddess"]
+            patron_affinity = agent.godmother_affinities["world_goddess"]
+        devotion = 0.5 * base_devotion + 0.5 * patron_affinity
 
         req_id = f"req_{agent.agent_id}_{uuid.uuid4().hex[:6]}"
         request = PalaceEntryRequest(
@@ -240,7 +245,7 @@ class PalaceSecurityEngine:
             return None
 
         self.agent_to_request.pop(req.agent_id, None)
-        day = (current_tick // 3600) + 1 if current_tick > 0 else 1
+        day = (current_tick // TICKS_PER_GAME_DAY) + 1 if current_tick > 0 else 1
         authority_label = decided_by.replace("_", " ").title()
 
         if decision == "GRANT":
@@ -373,66 +378,131 @@ class PalaceSecurityEngine:
                     (barracks_x - 3.0, barracks_z - 3.0),
                 ]
 
-            if self.engine:
-                slot_idx = self.engine.batched_net.allocate_slot()
-            else:
-                slot_idx = 1000 + i
-
             pos_x = waypoints[0][0]
             pos_z = waypoints[0][1]
 
-            knight = AgentRecord(
-                agent_id=knight_id,
-                slot_idx=slot_idx,
-                display_name=name,
-                dynasty_surname="Imperial Guard",
-                epithet="The Vigilant",
-                gender="BOY" if i % 2 == 0 else "GIRL",
-                race="HUMAN",
-                stage="ADULT",
-                role="PALACE_KNIGHT",
-                title="Palace Knight",
-                health=100.0,
-                max_health=100.0,
-                hunger=100.0,
-                stamina=100.0,
-                credits=200.0,
-                pos=Vec3(x=pos_x, y=PALACE_CENTER_Y, z=pos_z),
-            )
+            if self.engine:
+                pos_vec = Vec3(x=pos_x, y=PALACE_CENTER_Y, z=pos_z)
+                knight = self.engine.spawn_agent(
+                    race="HUMAN",
+                    gender="BOY" if i % 2 == 0 else "GIRL",
+                    stage="ADULT",
+                    pos=pos_vec,
+                    initial_credits=200.0,
+                    role="PALACE_KNIGHT",
+                    title="Palace Knight",
+                    dynasty_surname="Imperial Guard",
+                    agent_id=knight_id,
+                )
+                knight.pos.y = PALACE_CENTER_Y
+                knight.display_name = name
+                knight.epithet = "The Vigilant"
+                knight.health = 100.0
+                knight.max_health = 100.0
+                knight.hunger = 100.0
+                knight.stamina = 100.0
+            else:
+                slot_idx = 1000 + i
+                knight = AgentRecord(
+                    agent_id=knight_id,
+                    slot_idx=slot_idx,
+                    display_name=name,
+                    dynasty_surname="Imperial Guard",
+                    epithet="The Vigilant",
+                    gender="BOY" if i % 2 == 0 else "GIRL",
+                    race="HUMAN",
+                    stage="ADULT",
+                    role="PALACE_KNIGHT",
+                    profession="KNIGHT",
+                    title="Palace Knight",
+                    health=100.0,
+                    max_health=100.0,
+                    hunger=100.0,
+                    stamina=100.0,
+                    credits=200.0,
+                    pos=Vec3(x=pos_x, y=PALACE_CENTER_Y, z=pos_z),
+                    personality=generate_personality_vector("HUMAN"),
+                    mood=MoodState(calm=0.8),
+                )
+                agents_registry[knight_id] = knight
 
-            agents_registry[knight_id] = knight
             self.knight_agent_ids.append(knight_id)
             self.knight_roles[knight_id] = role_type
             self.knight_waypoints[knight_id] = waypoints
             self.knight_waypoint_idx[knight_id] = 0
             knights.append(knight)
 
-            if self.engine:
-                self.engine.spatial_grid.update_agent(knight_id, pos_x, pos_z)
-                self.engine.adapter.spawn_agent(
-                    agent_id=knight_id,
-                    slot_idx=slot_idx,
-                    metadata={
-                        "display_name": name,
-                        "race": "HUMAN",
-                        "gender": knight.gender,
-                        "role": "PALACE_KNIGHT",
-                        "stage": "ADULT",
-                        "x": pos_x,
-                        "y": PALACE_CENTER_Y,
-                        "z": pos_z,
-                    },
-                )
-
         return knights
+
+    def rebuild_knight_roster(self, agents_registry: dict[str, AgentRecord]) -> None:
+        """Reconstructs Palace Knight rosters and patrol waypoints from living agents on restore."""
+        self.knight_agent_ids.clear()
+        self.knight_roles.clear()
+        self.knight_waypoints.clear()
+        self.knight_waypoint_idx.clear()
+        self.knight_targets.clear()
+        self.reported_trespassers.clear()
+
+        barracks_x = -48.0
+        barracks_z = 12.0
+
+        knights = [
+            ag for ag in agents_registry.values()
+            if ag.alive and ag.role == "PALACE_KNIGHT"
+        ]
+        knights.sort(key=lambda a: a.agent_id)
+
+        for i, knight in enumerate(knights):
+            knight_id = knight.agent_id
+            self.knight_agent_ids.append(knight_id)
+
+            if i < 4:
+                role_type = "WALL_SENTRY"
+                waypoints = [
+                    (65.0, 0.0),
+                    (0.0, 65.0),
+                    (-65.0, 0.0),
+                    (0.0, -65.0),
+                ]
+            elif i < 8:
+                role_type = "COURTYARD_SENTRY"
+                waypoints = [
+                    (25.0, 15.0),
+                    (-25.0, 15.0),
+                    (-25.0, -20.0),
+                    (25.0, -20.0),
+                ]
+            elif i < 18:
+                role_type = "ROAD_CHECKPOINT"
+                road_idx = (i - 8) // 2
+                angle = math.radians(road_idx * 72.0)
+                cx = 42.0 * math.cos(angle)
+                cz = 42.0 * math.sin(angle)
+                offset = 4.0 if (i % 2 == 0) else -4.0
+                waypoints = [
+                    (cx + offset, cz),
+                    (cx - offset, cz),
+                ]
+            else:
+                role_type = "RAPID_RESPONSE"
+                waypoints = [
+                    (barracks_x + 3.0, barracks_z + 3.0),
+                    (barracks_x - 3.0, barracks_z - 3.0),
+                ]
+
+            self.knight_roles[knight_id] = role_type
+            self.knight_waypoints[knight_id] = waypoints
+            self.knight_waypoint_idx[knight_id] = 0
 
     def _dispatch_escort(self, target_agent_id: str) -> None:
         """Assigns the nearest available Palace Knight to escort an agent out."""
-        best_knight_id: str | None = None
+        for tid, _ in self.knight_targets.values():
+            if tid == target_agent_id:
+                return
 
+        best_knight_id: str | None = None
         for kid in self.knight_agent_ids:
             if kid not in self.knight_targets:
-                # Prioritize rapid response or courtyard guards
                 best_knight_id = kid
                 break
 
@@ -444,6 +514,10 @@ class PalaceSecurityEngine:
 
     def _dispatch_intercept(self, target_agent_id: str) -> None:
         """Assigns the nearest available Palace Knight to intercept a hostile/trespasser."""
+        for tid, _ in self.knight_targets.values():
+            if tid == target_agent_id:
+                return
+
         for kid in self.knight_agent_ids:
             if kid not in self.knight_targets:
                 self.knight_targets[kid] = (target_agent_id, "INTERCEPT")
@@ -567,8 +641,18 @@ class PalaceSecurityEngine:
             if knight_id in self.knight_targets:
                 target_id, mode = self.knight_targets[knight_id]
                 target = agents.get(target_id)
-                if not target:
+                if not target or not target.alive:
                     del self.knight_targets[knight_id]
+                    self.reported_trespassers.discard(target_id)
+                    continue
+
+                dist_to_center = math.hypot(
+                    target.pos.x - PALACE_CENTER_X, target.pos.z - PALACE_CENTER_Z
+                )
+                if dist_to_center >= OUTER_BOUNDARY_RADIUS:
+                    # Target has been cleared beyond outer perimeter
+                    del self.knight_targets[knight_id]
+                    self.reported_trespassers.discard(target_id)
                     continue
 
                 dx = target.pos.x - knight.pos.x
@@ -580,26 +664,63 @@ class PalaceSecurityEngine:
                     if dist > 2.0:
                         knight.pos.x += (dx / dist) * 1.2
                         knight.pos.z += (dz / dist) * 1.2
+                        knight.yaw = round(math.atan2(-dx, -dz), 4)
                     else:
-                        # Subdued/intercepted
+                        # Subdued/intercepted: deplete stamina and transition to ESCORT
                         target.stamina = 0.0
+                        self.knight_targets[knight_id] = (target_id, "ESCORT")
                 elif mode == "ESCORT":
                     # Shepherd target away from palace towards outer boundary
-                    dist_to_center = math.hypot(
+                    push_x = target.pos.x - PALACE_CENTER_X
+                    push_z = target.pos.z - PALACE_CENTER_Z
+                    p_len = math.hypot(push_x, push_z)
+                    if p_len > 0.001:
+                        target.pos.x += (push_x / p_len) * 1.0
+                        target.pos.z += (push_z / p_len) * 1.0
+                        target.yaw = round(math.atan2(-push_x, -push_z), 4)
+                        knight.pos.x = target.pos.x - (push_x / p_len) * 2.0
+                        knight.pos.z = target.pos.z - (push_z / p_len) * 2.0
+                        knight.yaw = round(math.atan2(-push_x, -push_z), 4)
+
+                        if self.engine:
+                            if hasattr(self.engine, "heightmap") and self.engine.heightmap:
+                                try:
+                                    target.pos.y = self.engine.heightmap.get_elevation(
+                                        target.pos.x, target.pos.z
+                                    )
+                                except (AttributeError, TypeError, IndexError):
+                                    target.pos.y = PALACE_CENTER_Y
+                            if hasattr(self.engine, "spatial_grid") and self.engine.spatial_grid:
+                                self.engine.spatial_grid.update_agent(
+                                    target_id, target.pos.x, target.pos.z
+                                )
+
+                    # Check if pushed beyond outer boundary during this step
+                    new_dist = math.hypot(
                         target.pos.x - PALACE_CENTER_X, target.pos.z - PALACE_CENTER_Z
                     )
-                    if dist_to_center < OUTER_BOUNDARY_RADIUS:
-                        push_x = target.pos.x - PALACE_CENTER_X
-                        push_z = target.pos.z - PALACE_CENTER_Z
-                        p_len = math.hypot(push_x, push_z)
-                        if p_len > 0.001:
-                            target.pos.x += (push_x / p_len) * 1.0
-                            target.pos.z += (push_z / p_len) * 1.0
-                            knight.pos.x = target.pos.x - (push_x / p_len) * 2.0
-                            knight.pos.z = target.pos.z - (push_z / p_len) * 2.0
-                    else:
-                        # Successfully escorted outside perimeter
+                    if new_dist >= OUTER_BOUNDARY_RADIUS:
                         del self.knight_targets[knight_id]
+                        self.reported_trespassers.discard(target_id)
+
+                if self.engine:
+                    if hasattr(self.engine, "heightmap") and self.engine.heightmap:
+                        try:
+                            knight.pos.y = self.engine.heightmap.get_elevation(
+                                knight.pos.x, knight.pos.z
+                            )
+                        except (AttributeError, TypeError, IndexError):
+                            knight.pos.y = PALACE_CENTER_Y
+                    if hasattr(self.engine, "spatial_grid") and self.engine.spatial_grid:
+                        self.engine.spatial_grid.update_agent(knight_id, knight.pos.x, knight.pos.z)
+                    if hasattr(self.engine, "adapter") and self.engine.adapter:
+                        self.engine.adapter.update_agent_position(
+                            slot_idx=knight.slot_idx,
+                            x=knight.pos.x,
+                            y=knight.pos.y,
+                            z=knight.pos.z,
+                            yaw=knight.yaw,
+                        )
                 continue
 
             # Normal cyclical patrol waypoint routing
@@ -622,3 +743,14 @@ class PalaceSecurityEngine:
                 speed = 0.6
                 knight.pos.x += (dx / dist) * speed
                 knight.pos.z += (dz / dist) * speed
+
+            if self.engine:
+                if hasattr(self.engine, "heightmap") and self.engine.heightmap:
+                    try:
+                        knight.pos.y = self.engine.heightmap.get_elevation(
+                            knight.pos.x, knight.pos.z
+                        )
+                    except (AttributeError, TypeError, IndexError):
+                        knight.pos.y = PALACE_CENTER_Y
+                if hasattr(self.engine, "spatial_grid") and self.engine.spatial_grid:
+                    self.engine.spatial_grid.update_agent(knight_id, knight.pos.x, knight.pos.z)

@@ -5,6 +5,12 @@
 
 extends Node3D
 
+const GodCamera = preload("res://scripts/god_camera_controller.gd")
+
+const DEITY_TALK_RADIUS_AVATAR: float = 6.5
+const DEITY_TALK_RADIUS_ORBITAL: float = 18.0
+const ORBITAL_TALK_MAX_ZOOM: float = 120.0
+
 @onready var god_camera: Node3D = $GodCameraController
 @onready var sky_weather: Node3D = $SkyWeatherController
 @onready var parcel_overlay: Node3D = $ParcelBorderOverlay
@@ -18,6 +24,7 @@ extends Node3D
 @onready var entity_inspector: CanvasLayer = $EntityInspector
 @onready var cities_manager: Node3D = $CitiesAndBuildingsManager
 @onready var dialogue_modal: CanvasLayer = $DialogueModal
+@onready var ui_state_manager: UiStateManager = $UiStateManager
 
 
 func _ready() -> void:
@@ -27,6 +34,17 @@ func _ready() -> void:
 	print("Vertical Slice C: Divine HUD, Two-Book Modals, God Console, Entity Inspector & Live Bridge Sync")
 	print("Sprint 3: 5 Equidistant Gated Cities, God-Mother Palaces & Modular Housing Active")
 	print("============================================================")
+
+	# Wire Centralized UI State Manager
+	if ui_state_manager:
+		if two_book_modal:
+			ui_state_manager.register_blocking_modal(two_book_modal)
+		if dialogue_modal:
+			ui_state_manager.register_blocking_modal(dialogue_modal)
+		if god_console_overlay:
+			ui_state_manager.register_blocking_modal(god_console_overlay)
+		if entity_inspector:
+			ui_state_manager.register_non_blocking_inspector(entity_inspector)
 
 	# Wire Vertical Slice C UI interactions
 	if landmarks_manager and two_book_modal:
@@ -75,24 +93,40 @@ func _on_bridge_disconnected() -> void:
 
 
 func _process(_delta: float) -> void:
-	if not dialogue_modal or dialogue_modal.is_dialogue_open:
+	if not dialogue_modal or not dialogue_modal.has_method("clear_interaction_target"):
 		return
-
-	# If near library lectern, lectern interaction takes priority for [E]
-	if two_book_modal and two_book_modal.get("is_near_lectern") == true:
+	# `is_dialogue_open` is a member variable (not a method): read it via get().
+	if dialogue_modal.get("is_dialogue_open") == true:
+		return
+	if not god_camera:
 		dialogue_modal.clear_interaction_target()
 		return
 
-	# Only check interactions when avatar exists
-	if not god_camera or not god_camera.avatar_body:
-		dialogue_modal.clear_interaction_target()
-		return
+	# Determine check position & radius:
+	# - 3rd-person: God avatar body within 6.5m
+	# - Orbital RTS (zoomed below 120m): orbital focus point within 18m
+	var check_pos: Vector3 = Vector3.ZERO
+	var check_radius: float = DEITY_TALK_RADIUS_AVATAR
+	var cam_mode = god_camera.get("mode")
+	var in_orbital: bool = (cam_mode != null and int(cam_mode) == GodCamera.CameraMode.ORBITAL_RTS)
 
-	var avatar_pos: Vector3 = god_camera.avatar_body.global_position
+	if in_orbital:
+		var target_zoom = god_camera.get("_target_zoom")
+		var orb_pos = god_camera.get("_orbital_target_pos")
+		if target_zoom == null or orb_pos == null or float(target_zoom) >= ORBITAL_TALK_MAX_ZOOM:
+			dialogue_modal.clear_interaction_target()
+			return
+		check_pos = orb_pos
+		check_radius = DEITY_TALK_RADIUS_ORBITAL
+	else:
+		if not god_camera.avatar_body:
+			dialogue_modal.clear_interaction_target()
+			return
+		check_pos = god_camera.avatar_body.global_position
 
-	# 1. Check for nearby Deity within 5.5m
+	# 1. Nearby Deity always takes priority over the Library Lectern
 	if divine_npcs and divine_npcs.has_method("get_nearest_deity"):
-		var nearest_deity: Dictionary = divine_npcs.get_nearest_deity(avatar_pos, 5.5)
+		var nearest_deity: Dictionary = divine_npcs.get_nearest_deity(check_pos, check_radius)
 		if not nearest_deity.is_empty():
 			dialogue_modal.set_interaction_target(
 				"DEITY",
@@ -104,15 +138,20 @@ func _process(_delta: float) -> void:
 			)
 			return
 
-	# 2. Check for nearby Mortal within 5.5m
+	# 2. Near the library lectern (and no deity nearby): lectern owns [E] ([L] opens books anywhere)
+	if two_book_modal and two_book_modal.get("is_near_lectern") == true:
+		dialogue_modal.clear_interaction_target()
+		return
+
+	# 3. Nearest Mortal within check radius
 	if reality_bubble_manager and reality_bubble_manager.has_method("get_pool"):
 		var pool: Array = reality_bubble_manager.get_pool()
 		var best_mortal: Node3D = null
-		var best_dist_sq: float = 5.5 * 5.5
+		var best_dist_sq: float = check_radius * check_radius
 
 		for actor in pool:
 			if actor and actor.visible and actor.is_pool_active:
-				var dist_sq: float = actor.global_position.distance_squared_to(avatar_pos)
+				var dist_sq: float = actor.global_position.distance_squared_to(check_pos)
 				if dist_sq < best_dist_sq:
 					best_dist_sq = dist_sq
 					best_mortal = actor

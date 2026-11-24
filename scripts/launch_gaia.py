@@ -24,18 +24,19 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from sim_core.bridge.godot_ws_bridge import GodotWebSocketBridge  # noqa: E402
-from sim_core.config import CIVIC_TICK_INTERVAL_TICKS, TICKS_PER_GAME_DAY  # noqa: E402
+from sim_core.config import CIVIC_TICK_INTERVAL_TICKS  # noqa: E402
 from sim_core.engine import SimulationEngine  # noqa: E402
 from sim_core.god_console.cli import RichGodConsole  # noqa: E402
 from sim_core.races import BeasthumanSubLineage  # noqa: E402
-from sim_core.schemas import Gender, RaceId, Vec3  # noqa: E402
+from sim_core.schemas import AgentRole, Gender, RaceId, Vec3  # noqa: E402
+from sim_core.society.wtc_market import WTCExchange  # noqa: E402
 
 
 def check_port_open(host: str, port: int) -> bool:
@@ -51,6 +52,7 @@ def check_port_open(host: str, port: int) -> bool:
 
 def check_llm_health(host: str = "127.0.0.1", port: int = 8080) -> bool:
     """Checks if llama-server /health endpoint responds with HTTP 200."""
+    import urllib.error
     import urllib.request
 
     url = f"http://{host}:{port}/health"
@@ -58,7 +60,7 @@ def check_llm_health(host: str = "127.0.0.1", port: int = 8080) -> bool:
         req = urllib.request.Request(url, headers={"User-Agent": "GaiaLauncher"})
         with urllib.request.urlopen(req, timeout=1.0) as resp:
             return resp.status == 200
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, OSError):
         return False
 
 
@@ -113,18 +115,25 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
 
     # Mixed-race cohort around Outer Imperial Plaza (r = 140m .. 340m)
     plaza_cohort_size = min(180, max(50, num_agents // 5))
-    roles: list[Literal["CITIZEN", "SCHOLAR", "MERCHANT"]] = [
+    roles: list[AgentRole] = [
         "CITIZEN",
-        "SCHOLAR",
+        "FARMER",
         "MERCHANT",
+        "BLACKSMITH",
+        "BUILDER",
+        "SCHOLAR",
+        "CLERIC",
+        "HUNTER",
     ]
-    print(f"[*] Spawning {plaza_cohort_size} citizens, scholars & merchants in Imperial Plaza...")
+    print(
+        f"[*] Spawning {plaza_cohort_size} diversified citizens & scholars in Imperial Plaza..."
+    )
 
     for j in range(plaza_cohort_size):
         race = races[j % 5]
         gender = genders[j % 2]
         sub_lineage = beasthuman_sublineages[j % 4] if race == "BEASTHUMAN" else None
-        role = roles[j % 3]
+        role = roles[j % len(roles)]
 
         angle = (j / float(plaza_cohort_size)) * 2.0 * math.pi
         radius = 150.0 + (j % 18) * 10.0  # 150m to 320m
@@ -132,9 +141,8 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
         pz = radius * math.sin(angle)
         pos_vec = Vec3(x=px, y=0.0, z=pz)
 
-        title = (
-            "Scholar" if role == "SCHOLAR" else ("Merchant" if role == "MERCHANT" else "Citizen")
-        )
+        title = role.replace("_", " ").title()
+        initial_cr = 60.0 if role in ("MERCHANT", "BLACKSMITH") else 35.0
 
         engine.spawn_agent(
             race=race,
@@ -144,7 +152,7 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
             pos=pos_vec,
             role=role,
             title=title,
-            initial_credits=50.0 if role == "MERCHANT" else 25.0,
+            initial_credits=initial_cr,
         )
 
     # 5 Ring 1 Cities: Spawn City Guard garrisons & residential populations
@@ -156,7 +164,9 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
         engine.city_layout.spawn_city_guard_garrison(engine.agents, cid, count=guards_per_city)
 
     remaining = max(0, num_agents - plaza_cohort_size - 24 - total_guards)
-    agents_per_city = remaining // 5 if len(engine.city_layout.cities) > 0 else 0
+    num_cities = len(engine.city_layout.cities)
+    agents_per_city = remaining // num_cities if num_cities > 0 else 0
+    remainder = remaining % num_cities if num_cities > 0 else 0
 
     other_races_map: dict[RaceId, list[RaceId]] = {
         "HUMAN": ["ELF", "DRAGON", "BEASTHUMAN", "DEMON"],
@@ -166,7 +176,7 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
         "DEMON": ["HUMAN", "ELF", "DRAGON", "BEASTHUMAN"],
     }
 
-    for cid, city in engine.city_layout.cities.items():
+    for c_idx, (cid, city) in enumerate(engine.city_layout.cities.items()):
         native_race = city.native_race
         other_pool = other_races_map[native_race]
         city_buildings = [
@@ -177,13 +187,15 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
             and b.building_type not in ("GODMOTHER_PALACE", "CITY_GATE")
         ]
         bld_assign_idx = 0
+        city_agent_count = agents_per_city + (1 if c_idx < remainder else 0)
 
-        for i in range(agents_per_city):
+        for i in range(city_agent_count):
             # 80-85% native race, 15-20% other races
             is_native = (i % 6) != 0  # 5 out of 6 = ~83.3%
             agent_race = native_race if is_native else other_pool[i % len(other_pool)]
             gender = genders[i % 2]
             sub_lineage = beasthuman_sublineages[i % 4] if agent_race == "BEASTHUMAN" else None
+            role = roles[i % len(roles)]
 
             # Spawn within city living radius (r = 50m .. 210m)
             angle = (i * 0.45) % (2.0 * math.pi)
@@ -192,13 +204,21 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
             pz = city.center_z + dist * math.sin(angle)
             py = engine.city_layout._get_elevation(px, pz, city.elevation_y)
 
+            title = role.replace("_", " ").title()
+            initial_cr = (
+                50.0 if role in ("MERCHANT", "BLACKSMITH") else (30.0 if is_native else 40.0)
+            )
+
             agent = engine.spawn_agent(
                 race=agent_race,
                 gender=gender,
                 sub_lineage=sub_lineage,
                 stage="ADULT",
                 pos=Vec3(x=round(px, 2), y=round(py, 2), z=round(pz, 2)),
-                initial_credits=30.0 if is_native else 40.0,
+                role=role,
+                title=title,
+                settlement_id=cid,
+                initial_credits=initial_cr,
             )
 
             # Assign seed house if available
@@ -206,12 +226,41 @@ def spawn_initial_population(engine: SimulationEngine, num_agents: int) -> None:
                 target_bld = city_buildings[bld_assign_idx]
                 target_bld.owner_id = agent.agent_id
                 target_bld.owner_name = agent.display_name
+                target_bld.for_sale = False
+                agent.home_building_id = target_bld.building_id
                 parcel_id = f"{target_bld.parcel_x}_{target_bld.parcel_z}"
                 parcel = engine.property_mgr.parcels.get(parcel_id)
                 if parcel:
                     parcel.owner_id = agent.agent_id
                     parcel.owner_type = "AGENT"
+                    parcel.for_sale_price = None
                 bld_assign_idx += 1
+
+    # Convert leftover placeholder seed owners to clean unowned for-sale homes
+    for bld in engine.city_layout.buildings.values():
+        if bld.building_type in ("GODMOTHER_PALACE", "CITY_GATE", "WALL_SEGMENT"):
+            continue
+        if bld.owner_id and (
+            bld.owner_id.startswith("citizen_") or bld.owner_id not in engine.agents
+        ):
+            bld.for_sale = True
+            bld.owner_id = None
+            bld.owner_name = None
+            parcel_id = f"{bld.parcel_x}_{bld.parcel_z}"
+            parcel = engine.property_mgr.parcels.get(parcel_id)
+            if parcel:
+                parcel.owner_id = None
+                parcel.owner_type = "UNCLAIMED"
+                parcel.for_sale_price = bld.sale_price
+
+    # Calibrate WTC macro baseline to initial circulating money supply and population output
+    initial_m = engine.bank.calculate_total_circulation(list(engine.agents.values()))
+    initial_q = WTCExchange.estimate_real_output_q(len(engine.agents))
+    engine.wtc.calibrate_baseline(initial_m, initial_q)
+    print(
+        f"[+] Calibrated WTC macro baseline: M0={initial_m:.1f}, Q0={initial_q:.1f}, "
+        f"CPI={engine.wtc.cpi:.3f}"
+    )
 
     print(f"[+] Spawned {len(engine.agents)} total living mortals, city guards & palace knights.")
 
@@ -227,6 +276,7 @@ class GaiaLauncher:
         self.spawned_llm_proc: bool = False
         self.llm_online: bool = False
         self._llm_log_file: Any = None
+        self._godot_log_file: Any = None
         self.engine: SimulationEngine | None = None
         self.bridge: GodotWebSocketBridge | None = None
         self.cli: RichGodConsole | None = None
@@ -241,7 +291,7 @@ class GaiaLauncher:
             )
 
         if should_enable_llm:
-            if check_llm_health(host="127.0.0.1", port=self.args.llm_port):
+            if await asyncio.to_thread(check_llm_health, host="127.0.0.1", port=self.args.llm_port):
                 print(f"[+] Reusing existing healthy llama-server on port {self.args.llm_port}.")
                 self.llm_online = True
                 self.spawned_llm_proc = False
@@ -281,7 +331,9 @@ class GaiaLauncher:
                                 f"(code {self.llm_proc.returncode})."
                             )
                             break
-                        if check_llm_health(host="127.0.0.1", port=self.args.llm_port):
+                        if await asyncio.to_thread(
+                            check_llm_health, host="127.0.0.1", port=self.args.llm_port
+                        ):
                             self.llm_online = True
                             break
                         await asyncio.sleep(0.5)
@@ -315,6 +367,21 @@ class GaiaLauncher:
 
         # 1. Initialize Bridge & Engine
         capacity = max(2048, self.args.agents + 512)
+        if self.args.fresh:
+            db_p = Path(self.args.db_path)
+            if db_p.exists():
+                db_p.unlink()
+            for ext in ("-wal", "-shm"):
+                wal_p = db_p.with_name(db_p.name + ext)
+                if wal_p.exists():
+                    wal_p.unlink()
+            cp_p = Path(self.args.checkpoints_dir)
+            if cp_p.exists():
+                shutil.rmtree(cp_p)
+            gl_p = Path(self.args.god_ledger_dir)
+            if gl_p.exists():
+                shutil.rmtree(gl_p)
+
         self.bridge = GodotWebSocketBridge(
             host=self.args.host,
             port=self.args.port,
@@ -346,8 +413,15 @@ class GaiaLauncher:
         self.cli = RichGodConsole(engine=self.engine)
         self.bridge.cli = self.cli
 
-        # Spawn initial population
-        spawn_initial_population(self.engine, self.args.agents)
+        # Checkpoint restore vs. fresh population spawn
+        if not self.args.fresh and self.engine.has_verified_checkpoint():
+            day, manifest, status_msg = self.engine.restore_from_checkpoint()
+            print(
+                f"[+] Restored persisted civilization: Day {day} ({status_msg}) — "
+                f"{len(self.engine.agents)} agents"
+            )
+        else:
+            spawn_initial_population(self.engine, self.args.agents)
 
         # 2. Start WebSocket Bridge server
         print(f"[*] Starting WebSocket server at ws://{self.args.host}:{self.args.port}...")
@@ -369,12 +443,19 @@ class GaiaLauncher:
             godot_bin = shutil.which("godot")
             if godot_bin:
                 print(f"[*] Launching Godot 4.7.2 3D client ({godot_bin})...")
+                log_dir = REPO_ROOT / "data" / "logs"
+                log_dir.mkdir(parents=True, exist_ok=True)
+                godot_log_path = log_dir / "godot_client.log"
+                self._godot_log_file = open(godot_log_path, "a", buffering=1, encoding="utf-8")
                 self.godot_proc = subprocess.Popen(
                     [godot_bin, "--path", "godot_client"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=self._godot_log_file,
+                    stderr=subprocess.STDOUT,
                 )
-                print(f"[+] Godot process launched (PID {self.godot_proc.pid}).")
+                print(
+                    f"[+] Godot process launched (PID {self.godot_proc.pid}). "
+                    "Logs: data/logs/godot_client.log"
+                )
             else:
                 print("[!] 'godot' binary not found in PATH; running in headless mode.")
 
@@ -386,6 +467,25 @@ class GaiaLauncher:
 
         try:
             while not self.stop_event.is_set():
+                # Check if Godot client closed
+                if self.godot_proc and self.godot_proc.poll() is not None:
+                    print("[*] Godot client window closed by user. Initiating clean shutdown...")
+                    break
+
+                # Check max duration limits if specified (evaluated even when paused)
+                now = time.time()
+                if (
+                    self.args.duration_seconds > 0
+                    and (now - start_time) >= self.args.duration_seconds
+                ):
+                    print(f"[*] Reached target duration ({self.args.duration_seconds}s).")
+                    break
+
+                # Respect Pause state: keep event loop responsive without advancing ticks
+                if not self.engine.is_running:
+                    await asyncio.sleep(0.05)
+                    continue
+
                 loop_start = time.perf_counter()
 
                 # Step engine
@@ -397,20 +497,7 @@ class GaiaLauncher:
                     payload = self.bridge.pack_binary_frame()
                     await self.bridge.broadcast_binary_async(payload)
 
-                # Broadcast world time & weather every 2 ticks
-                if tick_count % 2 == 0:
-                    time_of_day = (
-                        self.engine.current_tick % TICKS_PER_GAME_DAY
-                    ) / TICKS_PER_GAME_DAY
-                    season_progress = min(1.0, (self.engine.current_day % 120) / 120.0)
-                    self.bridge.sync_weather_time(
-                        day=self.engine.current_day,
-                        time_of_day=time_of_day,
-                        season_progress=season_progress,
-                        weather="CLEAR",
-                    )
-
-                # Broadcast WTC market prices on civic ticks
+                # Broadcast WTC and Courthouse board updates on civic ticks
                 if tick_count % CIVIC_TICK_INTERVAL_TICKS == 0:
                     self.bridge.emit_event(
                         "SIGN_UPDATE",
@@ -425,23 +512,25 @@ class GaiaLauncher:
                             },
                         },
                     )
+                    active_cases = len(self.engine.judiciary.get_open_cases())
+                    convictions = sum(
+                        len(records) for records in self.engine.judiciary.criminal_records.values()
+                    )
+                    polities_count = len(self.engine.political_engine.polities)
+                    self.bridge.emit_event(
+                        "SIGN_UPDATE",
+                        {
+                            "board": "COURTHOUSE",
+                            "active_cases": active_cases,
+                            "convictions": convictions,
+                            "polities_count": polities_count,
+                            "status": "Court in Order",
+                        },
+                    )
 
-                # Check max ticks / duration limits if specified
+                # Check max ticks if specified
                 if self.args.max_ticks > 0 and tick_count >= self.args.max_ticks:
                     print(f"[*] Reached target max ticks ({self.args.max_ticks}).")
-                    break
-
-                now = time.time()
-                if (
-                    self.args.duration_seconds > 0
-                    and (now - start_time) >= self.args.duration_seconds
-                ):
-                    print(f"[*] Reached target duration ({self.args.duration_seconds}s).")
-                    break
-
-                # Check if Godot client closed
-                if self.godot_proc and self.godot_proc.poll() is not None:
-                    print("[*] Godot client window closed by user. Initiating clean shutdown...")
                     break
 
                 # Sleep to match target speed (default 2 Hz = 0.5s / speed)
@@ -467,6 +556,11 @@ class GaiaLauncher:
                 self.godot_proc.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
                 self.godot_proc.kill()
+        if hasattr(self, "_godot_log_file") and self._godot_log_file:
+            try:
+                self._godot_log_file.close()
+            except OSError as exc:
+                print(f"[!] Warning: failed to close Godot log file cleanly: {exc}")
 
         # Stop WebSocket bridge
         if self.bridge:
@@ -495,8 +589,8 @@ class GaiaLauncher:
         if hasattr(self, "_llm_log_file") and self._llm_log_file:
             try:
                 self._llm_log_file.close()
-            except Exception:
-                pass
+            except OSError as exc:
+                print(f"[!] Warning: failed to close LLM log file cleanly: {exc}")
 
         print("✦ GAIA ENGINE SAFELY SHUT DOWN ✦")
 
@@ -511,6 +605,12 @@ def main() -> None:
     parser.add_argument("--max-ticks", type=int, default=0, help="Stop after N ticks (0=inf)")
     parser.add_argument("--duration-seconds", type=float, default=0.0, help="Stop after N s")
     parser.add_argument("--db-path", type=str, default="data/civilization.db", help="DB path")
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        default=False,
+        help="Force a fresh Day 1 world instead of restoring existing checkpoints",
+    )
     parser.add_argument(
         "--checkpoints-dir", type=str, default="data/checkpoints", help="Daily checkpoints path"
     )

@@ -78,3 +78,8 @@ class WorldAdapter(ABC):
     def broadcast_binary_frame(self, data: bytes) -> None:
         """Broadcasts packed binary coordinates for the 10,000+ Orbital God Map."""
         pass
+
+    @abstractmethod
+    def reset(self) -> None:
+        """Resets adapter internal state before full world reload/rewind."""
+        pass

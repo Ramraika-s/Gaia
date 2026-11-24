@@ -13,7 +13,7 @@ from typing import Any
 
 import duckdb
 
-DDL_SCHEMA = """
+DDL_TABLES = """
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA temp_store = MEMORY;
@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS divine_entities (
     oracle_agent_ids_json TEXT NOT NULL,
     active_truce_with_json TEXT NOT NULL,
     intervention_cooldown_until_tick INTEGER NOT NULL DEFAULT 0,
-    covenant_rebukes INTEGER NOT NULL DEFAULT 0
+    covenant_rebukes INTEGER NOT NULL DEFAULT 0,
+    personality_vector_json TEXT,
+    mood_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sister_council_messages (
@@ -92,7 +94,21 @@ CREATE TABLE IF NOT EXISTS agents (
     traits_json TEXT NOT NULL,
     skills_json TEXT NOT NULL,
     tradition_ids_json TEXT NOT NULL,
-    updated_tick INTEGER NOT NULL
+    updated_tick INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT 'CITIZEN',
+    title TEXT,
+    yaw REAL NOT NULL DEFAULT 0.0,
+    profession TEXT NOT NULL DEFAULT 'CITIZEN',
+    profession_level INTEGER NOT NULL DEFAULT 1,
+    profession_xp REAL NOT NULL DEFAULT 0.0,
+    hygiene REAL NOT NULL DEFAULT 1.0,
+    fatigue REAL NOT NULL DEFAULT 0.0,
+    known_books_json TEXT NOT NULL DEFAULT '[]',
+    personality_json TEXT,
+    mood_json TEXT,
+    active_mechanical_effects_json TEXT NOT NULL DEFAULT '{}',
+    equipped_gear_json TEXT NOT NULL DEFAULT '[]',
+    home_building_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS relationships (
@@ -263,7 +279,8 @@ CREATE TABLE IF NOT EXISTS world_library (
     fact_key TEXT,
     tags_json TEXT,
     mechanical_effects_json TEXT,
-    author_type TEXT DEFAULT 'MORTAL'
+    author_type TEXT DEFAULT 'MORTAL',
+    body TEXT
 );
 
 CREATE TABLE IF NOT EXISTS library_council_elders (
@@ -358,6 +375,28 @@ CREATE TABLE IF NOT EXISTS world_goddess_audit (
     reason TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS buildings (
+    building_id TEXT PRIMARY KEY,
+    city_id TEXT NOT NULL,
+    building_type TEXT NOT NULL,
+    racial_style TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL,
+    rotation_y REAL NOT NULL DEFAULT 0.0,
+    parcel_x INTEGER NOT NULL,
+    parcel_z INTEGER NOT NULL,
+    footprint_radius REAL NOT NULL DEFAULT 8.0,
+    owner_id TEXT,
+    owner_name TEXT,
+    for_sale INTEGER NOT NULL DEFAULT 0,
+    sale_price REAL NOT NULL DEFAULT 0.0,
+    settlement_id TEXT,
+    is_frontier INTEGER NOT NULL DEFAULT 0
+);
+"""
+
+DDL_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_agents_alive ON agents(alive);
 CREATE INDEX IF NOT EXISTS idx_agents_race ON agents(race, sub_lineage);
 CREATE INDEX IF NOT EXISTS idx_agents_patron ON agents(patron_godmother_slot);
@@ -371,29 +410,83 @@ CREATE INDEX IF NOT EXISTS idx_crimes_agent ON criminal_records(agent_id);
 CREATE INDEX IF NOT EXISTS idx_library_topic ON world_library(topic);
 CREATE INDEX IF NOT EXISTS idx_council_day ON sister_council_messages(day);
 CREATE INDEX IF NOT EXISTS idx_healer_day_class ON healer_incidents(day, fault_class);
+CREATE INDEX IF NOT EXISTS idx_buildings_city ON buildings(city_id);
+CREATE INDEX IF NOT EXISTS idx_buildings_owner ON buildings(owner_id);
+CREATE INDEX IF NOT EXISTS idx_buildings_settlement ON buildings(settlement_id);
 """
+
+DDL_SCHEMA = DDL_TABLES.strip() + "\n\n" + DDL_INDEXES.strip()
 
 
 def init_db(db_path: str | Path) -> None:
-    """Initializes the SQLite WAL database with the complete v3.0 schema."""
+    """Initializes the SQLite WAL database with idempotent schema migrations."""
     p = Path(db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(p) as conn:
-        conn.executescript(DDL_SCHEMA)
+        conn.executescript(DDL_TABLES)
         cursor = conn.cursor()
+
+        # Idempotent migrations: world_library
         cursor.execute("PRAGMA table_info(world_library);")
-        existing_cols = {row[1] for row in cursor.fetchall()}
-        new_cols = [
+        lib_cols = {row[1] for row in cursor.fetchall()}
+        new_lib_cols = [
             ("subject", "TEXT"),
             ("section", "TEXT"),
             ("fact_key", "TEXT"),
             ("tags_json", "TEXT"),
             ("mechanical_effects_json", "TEXT"),
             ("author_type", "TEXT DEFAULT 'MORTAL'"),
+            ("body", "TEXT"),
         ]
-        for col_name, col_type in new_cols:
-            if col_name not in existing_cols:
+        for col_name, col_type in new_lib_cols:
+            if col_name not in lib_cols:
                 cursor.execute(f"ALTER TABLE world_library ADD COLUMN {col_name} {col_type};")
+
+        # Idempotent migrations: agents (including legacy columns before index creation)
+        cursor.execute("PRAGMA table_info(agents);")
+        agent_cols = {row[1] for row in cursor.fetchall()}
+        new_agent_cols = [
+            ("alive", "INTEGER NOT NULL DEFAULT 1"),
+            ("sub_lineage", "TEXT"),
+            ("secondary_heritage_race", "TEXT"),
+            ("patron_godmother_slot", "TEXT"),
+            ("settlement_id", "TEXT"),
+            ("nation_id", "TEXT"),
+            ("religion_id", "TEXT"),
+            ("cleric_rank", "TEXT NOT NULL DEFAULT 'NONE'"),
+            ("stage", "TEXT NOT NULL DEFAULT 'INFANT'"),
+            ("role", "TEXT NOT NULL DEFAULT 'CITIZEN'"),
+            ("title", "TEXT"),
+            ("yaw", "REAL NOT NULL DEFAULT 0.0"),
+            ("profession", "TEXT NOT NULL DEFAULT 'CITIZEN'"),
+            ("profession_level", "INTEGER NOT NULL DEFAULT 1"),
+            ("profession_xp", "REAL NOT NULL DEFAULT 0.0"),
+            ("hygiene", "REAL NOT NULL DEFAULT 1.0"),
+            ("fatigue", "REAL NOT NULL DEFAULT 0.0"),
+            ("known_books_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ("personality_json", "TEXT"),
+            ("mood_json", "TEXT"),
+            ("active_mechanical_effects_json", "TEXT NOT NULL DEFAULT '{}'"),
+            ("equipped_gear_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ("home_building_id", "TEXT"),
+        ]
+        for col_name, col_type in new_agent_cols:
+            if col_name not in agent_cols:
+                cursor.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_type};")
+
+        # Idempotent migrations: divine_entities
+        cursor.execute("PRAGMA table_info(divine_entities);")
+        de_cols = {row[1] for row in cursor.fetchall()}
+        new_de_cols = [
+            ("personality_vector_json", "TEXT"),
+            ("mood_json", "TEXT"),
+        ]
+        for col_name, col_type in new_de_cols:
+            if col_name not in de_cols:
+                cursor.execute(f"ALTER TABLE divine_entities ADD COLUMN {col_name} {col_type};")
+
+        # Safely execute index creation only after all tables and columns exist
+        conn.executescript(DDL_INDEXES)
         conn.commit()
 
 

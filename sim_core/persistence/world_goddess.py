@@ -8,6 +8,37 @@ from __future__ import annotations
 
 from sim_core.schemas import CommitProposal, CriticVerdict
 
+KNOWN_REGISTERED_KINDS: frozenset[str] = frozenset(
+    {
+        "CONCEPTION",
+        "BIRTH",
+        "DEATH",
+        "STAGE_UP",
+        "PATRON_CHOICE",
+        "SELF_RENAME",
+        "CREDIT_TRANSFER",
+        "LIBRARY_ENTRY",
+        "LIBRARY_VOTE",
+        "TRADITION",
+        "CRIME_REPORT",
+        "JUDICIARY_RULING",
+        "BANK_LOAN",
+        "PARCEL_TRANSFER",
+        "SETTLEMENT_APPEAL",
+        "SETTLEMENT_UPDATE",
+        "ELECTION_OR_SUCCESSION",
+        "RELIGION_DECREE",
+        "WAR_DECLARATION",
+        "WTC_INTERVENTION",
+        "GOD_MOTHER_INTERVENTION",
+        "SISTER_COUNCIL_RESOLUTION",
+        "NAME_DEITY",
+        "DIVINE_DECREE",
+        "DIVINE_CODEX_DECREE",
+        "DIVINE_CODEX_PROPOSAL",
+    }
+)
+
 
 class WorldGoddessCritic:
     """
@@ -238,7 +269,7 @@ class WorldGoddessCritic:
                     "Unauthorized: parameter overrides require direct God execution (Option B)",
                 )
 
-            # Non-mechanical text decree requires World Goddess + >= 3/4 Daughters
+            # Non-mechanical text decree requires World Goddess + >= 3/5 Daughters
             actor = proposal.actor_id or ""
             approvals_list = payload.get("supporting_daughter_slots", [])
             daughter_approvals = payload.get(
@@ -339,6 +370,10 @@ class WorldGoddessCritic:
                     "Rejected: Neutral Free Cities cannot declare offensive war",
                 )
             return self._approve(proposal, "War declaration approved")
+
+        # Check against registered valid CommitKinds fail-closed
+        if kind not in KNOWN_REGISTERED_KINDS:
+            return self._reject(proposal, f"Rejected: unrecognized commit kind '{kind}'")
 
         # Default fallback approval for other registered kinds
         return self._approve(proposal, f"Approved {kind}")

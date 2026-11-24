@@ -13,6 +13,7 @@ from typing import Any, Final
 from pydantic import BaseModel
 
 from sim_core.schemas import DeitySlot, GodLedgerEntry, PrayerIntent
+from sim_core.society.seasons import SeasonManager
 
 DEFAULT_LEDGER_DIR: Final[str] = "data/god_ledger"
 
@@ -150,6 +151,11 @@ class GodLedgerPipeline:
         self.altar_prayers.append(prayer)
         return prayer
 
+    def clear_buffer(self) -> None:
+        """Clears the buffered messages and altar prayers for the next game day."""
+        self.buffer.clear()
+        self.altar_prayers.clear()
+
     def compile_daily_ledger_markdown(
         self,
         day: int,
@@ -163,9 +169,10 @@ class GodLedgerPipeline:
         tie_breaks: list[str] | None = None,
     ) -> str:
         """Compiles the full daily markdown God Ledger (data/god_ledger/day_XXXXX.md)."""
+        year = SeasonManager.get_year(day)
         demo_str = " | ".join(f"{k.capitalize()}s: {v}" for k, v in demographics.items())
         lines = [
-            f"# World Goddess Daily Ledger — Day {day} ({season.capitalize()}, Year 1)",
+            f"# World Goddess Daily Ledger — Day {day} ({season.capitalize()}, Year {year})",
             f"Compiled & Verified by: **{world_goddess_name}** | SHA-256 Commit: `VERIFIED`\n",
             "## 1. World Goddess Civilization Summary",
             f"- Living Population: {living_population} ({demo_str})",
@@ -266,7 +273,6 @@ class GodLedgerPipeline:
         os.replace(tmp_latest, latest_file)
 
         # Clear RAM buffer for next day
-        self.buffer.clear()
-        self.altar_prayers.clear()
+        self.clear_buffer()
 
         return day_file, latest_file

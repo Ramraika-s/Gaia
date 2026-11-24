@@ -29,7 +29,8 @@ signal dialogue_closed
 @onready var btn_council: Button = $DialoguePanel/HBox/RightCol/ActionRow/BtnCouncil
 @onready var btn_return_palace: Button = $DialoguePanel/HBox/RightCol/ActionRow/BtnReturnPalace
 
-const PORTRAIT_GODDESS: String = "res://assets/ui/portraits/world_goddess_portrait.png"
+const PORTRAIT_GODDESS: String = "res://assets/deities/world_goddess_portrait.png"
+const CLIENT_TIMEOUT_SECONDS: float = 16.0
 
 var current_target_type: String = "DEITY"  # "DEITY" or "MORTAL"
 var current_target_id: String = ""
@@ -39,11 +40,20 @@ var current_target_race: String = ""
 var current_target_mood: String = "calm"
 var is_near_target: bool = false
 var is_dialogue_open: bool = false
+var is_awaiting_reply: bool = false
+
+var _timeout_timer: Timer = null
 
 
 func _ready() -> void:
 	prompt_panel.visible = false
 	dialogue_panel.visible = false
+	_timeout_timer = Timer.new()
+	_timeout_timer.name = "ReplyTimeoutTimer"
+	_timeout_timer.one_shot = true
+	_timeout_timer.wait_time = CLIENT_TIMEOUT_SECONDS
+	_timeout_timer.timeout.connect(_on_reply_timeout)
+	add_child(_timeout_timer)
 	_connect_ui_signals()
 	_connect_bridge_signals()
 
@@ -67,13 +77,36 @@ func _connect_bridge_signals() -> void:
 			bridge.connect("dialogue_response_received", Callable(self, "_on_dialogue_response_received"))
 
 
+func is_modal_open() -> bool:
+	return is_dialogue_open
+
+
+func _input(event: InputEvent) -> void:
+	if not is_dialogue_open:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		var key_ev: InputEventKey = event as InputEventKey
+		var is_esc: bool = (key_ev.keycode == KEY_ESCAPE or key_ev.physical_keycode == KEY_ESCAPE)
+		if is_esc:
+			var focused: Control = get_viewport().gui_get_focus_owner()
+			if focused:
+				focused.release_focus()
+			close_dialogue()
+			get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_E:
-			if is_near_target and not is_dialogue_open:
+		var key_ev: InputEventKey = event as InputEventKey
+		var is_e: bool = (key_ev.keycode == KEY_E or key_ev.physical_keycode == KEY_E)
+		var is_esc: bool = (key_ev.keycode == KEY_ESCAPE or key_ev.physical_keycode == KEY_ESCAPE)
+
+		if is_e:
+			var blocked: bool = UiStateManager.is_input_blocked()
+			if is_near_target and not is_dialogue_open and not blocked:
 				open_dialogue()
 				get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_ESCAPE:
+		elif is_esc:
 			if is_dialogue_open:
 				close_dialogue()
 				get_viewport().set_input_as_handled()
@@ -95,7 +128,8 @@ func set_interaction_target(
 	current_target_mood = mood
 	is_near_target = (tid != "")
 
-	if is_near_target and not is_dialogue_open:
+	var blocking_open: bool = (UiStateManager.instance != null and UiStateManager.instance.is_blocking_modal_open())
+	if is_near_target and not is_dialogue_open and not blocking_open:
 		prompt_label.text = "[E] Speak with %s" % tname
 		prompt_panel.visible = true
 	else:
@@ -121,27 +155,28 @@ func open_dialogue(
 	prompt_panel.visible = false
 	dialogue_panel.visible = true
 
-	# Release mouse cursor
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-
 	# Update header info
 	name_label.text = current_target_name
 	title_label.text = current_target_title
 	race_mood_label.text = "[%s • %s]" % [current_target_race, current_target_mood.to_upper()]
 
+	# Always reset portrait before checking target
+	portrait_rect.texture = null
+	portrait_rect.visible = false
+
 	# Load portrait if World Goddess
 	if current_target_id == "world_goddess":
 		if ResourceLoader.exists(PORTRAIT_GODDESS):
-			var res = load(PORTRAIT_GODDESS)
+			var res: Resource = load(PORTRAIT_GODDESS)
 			if res is Texture2D:
-				portrait_rect.texture = res
+				portrait_rect.texture = res as Texture2D
 		if portrait_rect.texture == null and FileAccess.file_exists(PORTRAIT_GODDESS):
 			var img: Image = Image.load_from_file(PORTRAIT_GODDESS)
 			if img:
 				portrait_rect.texture = ImageTexture.create_from_image(img)
 		portrait_rect.visible = (portrait_rect.texture != null)
 	else:
-		portrait_rect.visible = (portrait_rect.texture != null)
+		portrait_rect.visible = false
 
 	# Adjust buttons depending on whether target is Deity or Mortal
 	var is_deity: bool = (current_target_type == "DEITY")
@@ -157,22 +192,35 @@ func open_dialogue(
 	input_edit.grab_focus()
 
 	dialogue_opened.emit()
+	if UiStateManager.instance:
+		UiStateManager.instance.notify_modal_opened(self)
 
 
 func close_dialogue() -> void:
 	is_dialogue_open = false
+	_stop_reply_wait()
 	dialogue_panel.visible = false
-
-	# Re-capture mouse
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	var vp: Viewport = get_viewport()
+	if vp:
+		var fo: Control = vp.gui_get_focus_owner()
+		if fo and is_ancestor_of(fo):
+			fo.release_focus()
 
 	if is_near_target:
 		prompt_panel.visible = true
 
 	dialogue_closed.emit()
+	if UiStateManager.instance:
+		UiStateManager.instance.notify_modal_closed(self)
+
+
+func close_modal() -> void:
+	close_dialogue()
 
 
 func _on_send_pressed() -> void:
+	if is_awaiting_reply:
+		return
 	var text: String = input_edit.text.strip_edges()
 	if text == "":
 		return
@@ -185,40 +233,101 @@ func _on_send_pressed() -> void:
 
 
 func _send_quick_action(message: String, order: String) -> void:
+	if is_awaiting_reply:
+		return
 	log_label.append_text("[b][color=#ffd700]God Avatar:[/color][/b] %s\n" % message)
 	_dispatch_request(message, order)
 
 
+func _set_input_enabled(enabled: bool) -> void:
+	input_edit.editable = enabled
+	btn_send.disabled = not enabled
+	btn_world_report.disabled = not enabled
+	btn_books_council.disabled = not enabled
+	btn_follow.disabled = not enabled
+	btn_council.disabled = not enabled
+	btn_return_palace.disabled = not enabled
+	if enabled and is_dialogue_open:
+		input_edit.grab_focus()
+
+
+func _start_reply_wait() -> void:
+	is_awaiting_reply = true
+	_set_input_enabled(false)
+	if _timeout_timer:
+		_timeout_timer.start(CLIENT_TIMEOUT_SECONDS)
+
+
+func _stop_reply_wait() -> void:
+	is_awaiting_reply = false
+	if _timeout_timer:
+		_timeout_timer.stop()
+	_set_input_enabled(true)
+
+
 func _dispatch_request(message: String, order: String) -> void:
 	var bridge: Node = get_node_or_null("/root/WsBridgeClient")
-	if bridge and bridge.has_method("send_dialogue_request"):
+	var live: bool = (
+		bridge != null
+		and bridge.has_method("is_bridge_connected")
+		and bridge.is_bridge_connected()
+		and bridge.has_method("send_dialogue_request")
+	)
+	if live:
+		log_label.append_text("[color=#77aacc]<i>✦ %s is pondering your words...</i>[/color]\n" % current_target_name)
+		_start_reply_wait()
 		bridge.send_dialogue_request(current_target_type, current_target_id, message, order)
 	else:
-		# Offline local mock response
-		call_deferred("_mock_local_response", message, order)
+		# Never silent: tell the player the link is offline and answer locally right away.
+		log_label.append_text("[color=#ffaa55]<i>[Offline Standalone Mode] The Python core is not connected; answering from local memory.</i>[/color]\n")
+		_mock_local_response(message, order)
+
+
+func _on_reply_timeout() -> void:
+	if not is_awaiting_reply:
+		return
+	is_awaiting_reply = false
+	_set_input_enabled(true)
+	log_label.append_text("[color=#ffaa55]<i>(Divine link delayed — retrying or check llama-server status)</i>[/color]\n\n")
 
 
 func _mock_local_response(message: String, order: String) -> void:
-	var reply: String = "I hear Your divine words, My Lord."
-	if order == "CONVENE_COUNCIL":
-		reply = "The Great Bell tolls. The 5-Sister Council is convened at the Grand Palace Courtyard!"
-	elif order == "FOLLOW_GOD":
-		reply = "I follow Your divine steps."
-	elif "report" in message.to_lower():
-		reply = "The realm is peaceful. All five races prosper under the celestial vault."
+	var is_deity: bool = (current_target_type == "DEITY")
+	var reply: String
+	if is_deity:
+		reply = "I hear Your divine words, My Lord."
+		if order == "CONVENE_COUNCIL":
+			reply = "The Great Bell tolls. The 5-Sister Council is convened at the Grand Palace Courtyard!"
+		elif order == "FOLLOW_GOD":
+			reply = "I follow Your divine steps."
+		elif order == "RETURN_PALACE":
+			reply = "By Your will, I return to my sacred seat."
+		elif "report" in message.to_lower():
+			reply = "The realm is peaceful. All five races prosper under the celestial vault."
+	else:
+		reply = "Blessings upon you, traveler. May your road through our city be prosperous."
+		var low: String = message.to_lower()
+		if "name" in low or "who" in low:
+			reply = "I am %s, a humble citizen of this land." % current_target_name
+		elif "trade" in low or "price" in low or "buy" in low:
+			reply = "The stalls around the plaza have honest wares, though prices shift at the World Trade Centre."
 
 	_on_dialogue_response_received({
 		"target_name": current_target_name,
 		"spoken_reply": reply,
-		"action_taken": ("Executed order: " + order) if order != "" else ""
+		"action_taken": ("Executed order: " + order) if order != "" else "",
+		"llm_backend": "OFFLINE_STANDALONE",
 	})
 
 
 func _on_dialogue_response_received(data: Dictionary) -> void:
-	var speaker: String = data.get("target_name", current_target_name)
-	var reply: String = data.get("spoken_reply", "")
-	var action: String = data.get("action_taken", "")
-	var backend: String = data.get("llm_backend", "")
+	_stop_reply_wait()
+	var speaker: String = str(data.get("target_name", current_target_name))
+	var reply: String = str(data.get("spoken_reply", ""))
+	if reply.strip_edges() == "":
+		reply = "…(%s regards you in silence.)" % speaker
+	var action: String = str(data.get("action_taken", ""))
+	var backend: String = str(data.get("llm_backend", ""))
 
 	log_label.append_text("[b][color=#aaccff]%s:[/color][/b] %s\n" % [speaker, reply])
 	if action != "":

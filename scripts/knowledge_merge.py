@@ -22,7 +22,6 @@ import shutil
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -32,117 +31,21 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from sim_core.knowledge.db_loader import (
+    collect_staged_packs,
+    ensure_world_library_schema,
+    load_library_from_db,
+)
 from sim_core.knowledge.dedupe import DeduplicationEngine
 from sim_core.knowledge.schema import KnowledgePack
 from sim_core.persistence.world_goddess import WorldGoddessCritic
 from sim_core.schemas import CommitProposal
 
-
-def ensure_db_columns(conn: sqlite3.Connection) -> None:
-    """Ensures world_library table and extended metadata columns exist."""
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS world_library (
-        entry_id TEXT PRIMARY KEY,
-        topic TEXT NOT NULL,
-        title TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        author_id TEXT NOT NULL,
-        author_proficiency REAL NOT NULL DEFAULT 0.85,
-        skill_bonus REAL NOT NULL DEFAULT 0.08,
-        is_scripture INTEGER NOT NULL DEFAULT 0,
-        read_count INTEGER NOT NULL DEFAULT 0,
-        created_tick INTEGER NOT NULL DEFAULT 0,
-        subject TEXT,
-        section TEXT,
-        fact_key TEXT,
-        tags_json TEXT,
-        mechanical_effects_json TEXT,
-        author_type TEXT DEFAULT 'MORTAL'
-    );
-    """)
-
-    # Check for existing table missing new columns and add them dynamically
-    cursor.execute("PRAGMA table_info(world_library);")
-    existing_cols = {row[1] for row in cursor.fetchall()}
-
-    new_cols = [
-        ("subject", "TEXT"),
-        ("section", "TEXT"),
-        ("fact_key", "TEXT"),
-        ("tags_json", "TEXT"),
-        ("mechanical_effects_json", "TEXT"),
-        ("author_type", "TEXT DEFAULT 'MORTAL'"),
-    ]
-    for col_name, col_type in new_cols:
-        if col_name not in existing_cols:
-            cursor.execute(f"ALTER TABLE world_library ADD COLUMN {col_name} {col_type};")
-
-    conn.commit()
+# Alias for backwards compatibility with tests
+ensure_db_columns = ensure_world_library_schema
 
 
-def load_library_from_db(db_path: Path) -> list[dict[str, Any]]:
-    """Loads existing world_library entries from SQLite."""
-    if not db_path.exists():
-        return []
-
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='world_library';"
-        )
-        if not cursor.fetchone():
-            conn.close()
-            return []
-
-        cursor.execute("PRAGMA table_info(world_library);")
-        cols = [r[1] for r in cursor.fetchall()]
-
-        cursor.execute("SELECT * FROM world_library;")
-        rows = cursor.fetchall()
-        entries = []
-        for r in rows:
-            d = dict(zip(cols, r, strict=False))
-            entries.append(
-                {
-                    "entry_id": d["entry_id"],
-                    "subject": d.get("subject") or d.get("topic", "unknown"),
-                    "topic": d.get("topic", "unknown"),
-                    "fact_key": d.get("fact_key") or d.get("topic", "unknown"),
-                    "title": d.get("title", ""),
-                    "summary": d.get("summary", ""),
-                    "body": d.get("summary", ""),
-                    "author": d.get("author_id", "system"),
-                    "author_id": d.get("author_id", "system"),
-                    "author_type": d.get("author_type", "MORTAL"),
-                    "mechanical_effects": json.loads(d.get("mechanical_effects_json") or "{}"),
-                    "supersedes": [],
-                    "distinct_from": [],
-                }
-            )
-        conn.close()
-        return entries
-    except Exception as ex:
-        print(f"Warning: Could not read library from {db_path}: {ex}", file=sys.stderr)
-        return []
-
-
-def collect_staged_packs(knowledge_dir: Path) -> list[Path]:
-    """Collects all staged .json files, skipping directories starting with '_'."""
-    packs = []
-    if not knowledge_dir.exists():
-        return packs
-
-    for p in sorted(knowledge_dir.rglob("*.json")):
-        rel_parts = p.relative_to(knowledge_dir).parts
-        if any(part.startswith("_") for part in rel_parts[:-1]):
-            continue
-        packs.append(p)
-    return packs
-
-
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Gaia v4.0 Knowledge Foundry Merge CLI")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -167,8 +70,20 @@ def main() -> int:
         default=Path("data/civilization.db"),
         help="Path to SQLite civilization database (default: data/civilization.db)",
     )
+    parser.add_argument(
+        "--pack",
+        type=Path,
+        default=None,
+        help="Optional specific pack file to merge",
+    )
+    parser.add_argument(
+        "--archive-dir",
+        type=Path,
+        default=None,
+        help="Optional custom archive directory (default: <knowledge_dir>/_merged_archive)",
+    )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     console = Console()
 
     mode_str = (
@@ -184,13 +99,34 @@ def main() -> int:
         )
     )
 
-    packs = collect_staged_packs(args.knowledge_dir)
+    packs = collect_staged_packs(args.knowledge_dir, pack_path=args.pack)
     if not packs:
         console.print("[yellow]No staged packs found to merge.[/yellow]")
         return 0
 
     existing_entries = load_library_from_db(args.db_path)
     engine = DeduplicationEngine(existing_entries)
+
+    # Register entries from other staged packs in knowledge_dir to catch cross-pack duplicates
+    if args.pack:
+        target_path = args.pack.resolve()
+        sibling_packs = [
+            p for p in collect_staged_packs(args.knowledge_dir)
+            if p.resolve() != target_path
+        ]
+        for sib in sibling_packs:
+            try:
+                with open(sib, encoding="utf-8") as f:
+                    sib_data = json.load(f)
+                sib_entries = (
+                    sib_data.get("entries", [])
+                    if isinstance(sib_data, dict)
+                    else (sib_data if isinstance(sib_data, list) else [])
+                )
+                for entry_dict in sib_entries:
+                    engine._register_existing(entry_dict)
+            except Exception:
+                pass
 
     report = engine.audit_packs(packs)
 
@@ -242,8 +178,12 @@ def main() -> int:
                     )
                     return 1
 
+            try:
+                rel_label = str(p.relative_to(args.knowledge_dir))
+            except ValueError:
+                rel_label = str(p)
             dry_table.add_row(
-                str(p.relative_to(args.knowledge_dir)),
+                rel_label,
                 str(len(pack_obj.entries)),
                 "APPROVED (Bypass Granted)",
             )
@@ -264,7 +204,7 @@ def main() -> int:
     # -------------------------------------------------------------------------
     args.db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(args.db_path)
-    ensure_db_columns(conn)
+    ensure_world_library_schema(conn)
 
     cursor = conn.cursor()
     cursor.execute("BEGIN IMMEDIATE;")
@@ -310,8 +250,9 @@ def main() -> int:
                     INSERT OR REPLACE INTO world_library (
                         entry_id, topic, title, summary, author_id, author_proficiency,
                         skill_bonus, is_scripture, read_count, created_tick,
-                        subject, section, fact_key, tags_json, mechanical_effects_json, author_type
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        subject, section, fact_key, tags_json, mechanical_effects_json,
+                        author_type, body
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         entry.entry_id,
@@ -330,6 +271,7 @@ def main() -> int:
                         tags_json,
                         effects_json,
                         entry.author_type,
+                        entry.body,
                     ),
                 )
                 merged_entries_count += 1
@@ -343,8 +285,12 @@ def main() -> int:
 
     conn.close()
 
-    # Move merged packs to _merged_archive/ with timestamp stamp
-    archive_dir = args.knowledge_dir / "_merged_archive"
+    # Move merged packs to archive_dir with timestamp stamp
+    archive_dir = (
+        args.archive_dir
+        if args.archive_dir is not None
+        else (args.knowledge_dir / "_merged_archive")
+    )
     archive_dir.mkdir(parents=True, exist_ok=True)
     timestamp_prefix = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d_%H%M%S")
 

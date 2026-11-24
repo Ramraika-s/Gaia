@@ -7,7 +7,7 @@ for the Gaia Persistent Unbounded Multi-Race AI Civilization Engine.
 from __future__ import annotations
 
 import random
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 # ==============================================================================
 # 1. Pacing & Time Constants
@@ -114,12 +114,17 @@ def calculate_age_days(ticks: int) -> float:
 
 SettlementTier = Literal["VILLAGE", "TOWN", "CITY", "STATE", "NATION"]
 
-SETTLEMENT_TIER_REQUIREMENTS: Final[dict[SettlementTier, dict[str, float]]] = {
-    "VILLAGE": {"min_population": 5, "min_parcels": 4, "min_treasury": 50.0},
-    "TOWN": {"min_population": 25, "min_parcels": 16, "min_treasury": 250.0},
-    "CITY": {"min_population": 100, "min_parcels": 48, "min_treasury": 1000.0},
-    "STATE": {"min_population": 300, "min_parcels": 120, "min_treasury": 3500.0},
-    "NATION": {"min_population": 800, "min_parcels": 250, "min_treasury": 10000.0},
+SETTLEMENT_TIER_REQUIREMENTS: Final[dict[SettlementTier, dict[str, Any]]] = {
+    "VILLAGE": {"min_pop": 10, "min_population": 10, "min_parcels": 4, "min_treasury": 50.0},
+    "TOWN": {"min_pop": 50, "min_population": 50, "min_parcels": 16, "min_treasury": 300.0},
+    "CITY": {"min_pop": 250, "min_population": 250, "min_parcels": 48, "min_treasury": 1500.0},
+    "STATE": {"min_pop": 600, "min_population": 600, "min_parcels": 100, "min_treasury": 5000.0},
+    "NATION": {
+        "min_pop": 1000,
+        "min_population": 1000,
+        "min_parcels": 160,
+        "min_treasury": 12000.0,
+    },
 }
 
 # Free City multi-racial threshold
@@ -133,9 +138,9 @@ MAX_ELDERS_PER_NATION: Final[int] = 2
 DEFAULT_DEITY_NAMES: Final[dict[str, str]] = {
     "world_goddess": "Gaia",
     "gm_human": "Solis",
-    "gm_elf": "Sylphira",
-    "gm_dragon": "Ignis",
-    "gm_beasthuman": "Fauna",
+    "gm_elf": "Aria",
+    "gm_dragon": "Pyra",
+    "gm_beasthuman": "Terra",
     "gm_demon": "Morvath",
 }
 

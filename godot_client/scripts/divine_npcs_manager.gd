@@ -74,6 +74,8 @@ const DEITY_CONFIGS: Array[Dictionary] = [
 
 var _spawned_deities: Dictionary = {}
 var _deity_targets: Dictionary = {}  # did -> {pos: Vector3, yaw: float, speed: float, speech: String, activity: String}
+var _min_mesh_y_by_id: Dictionary = {}
+var _home_pos_by_id: Dictionary = {}
 var _float_time: float = 0.0
 
 
@@ -100,15 +102,31 @@ func _on_deity_sync_received(deities: Array) -> void:
 		var px: float = float(d.get("x", 0.0))
 		var pz: float = float(d.get("z", 0.0))
 		var py: float = float(d.get("y", 0.0))
-		# Use heightmap if py is not explicit or ground height
 		var ground_y: float = TerrainHeightSampler.get_height(px, pz)
-		var dais: float = 1.2 if did == "world_goddess" else 3.2
-		var final_y: float = max(py, ground_y + dais)
+		var min_y: float = float(_min_mesh_y_by_id.get(did, 0.0))
+		var home_pos: Vector3 = _home_pos_by_id.get(did, Vector3.ZERO)
+		var dist_home_sq: float = Vector2(px - home_pos.x, pz - home_pos.z).length_squared()
+		var on_home_dais: bool = (dist_home_sq <= 72.25)
+		var applied_dais: float = (1.2 if did == "world_goddess" else 3.2) if on_home_dais else 0.0
+		var final_y: float = ground_y + applied_dais - min_y
 
 		var yaw: float = float(d.get("yaw", 0.0))
 		var spd: float = float(d.get("speed", 0.0))
 		var speech: String = str(d.get("speech_text", ""))
 		var activity: String = str(d.get("activity", "IDLE"))
+
+		var deity_name: String = str(d.get("name", ""))
+		if deity_name != "":
+			var deity_node: Node3D = _spawned_deities.get(did, null)
+			if deity_node:
+				var nameplate: Label3D = deity_node.get_node_or_null("Nameplate") as Label3D
+				if nameplate:
+					var epithet: String = ""
+					for cfg in DEITY_CONFIGS:
+						if cfg.get("id") == did:
+							epithet = str(cfg.get("epithet", ""))
+							break
+					nameplate.text = "✦ %s ✦\n[%s]" % [deity_name, epithet]
 
 		_deity_targets[did] = {
 			"pos": Vector3(px, final_y, pz),
@@ -169,8 +187,12 @@ func _spawn_deity(cfg: Dictionary) -> void:
 		model_container.add_child(mesh_inst)
 
 	var min_y: float = _get_min_mesh_y(model_container)
+	_min_mesh_y_by_id[did] = min_y
+	_home_pos_by_id[did] = pos_cfg
 	var dais_offset: float = float(cfg.get("dais_offset", 0.0))
 	root.position = Vector3(pos_cfg.x, ground_y + dais_offset - min_y, pos_cfg.z)
+	# Face +Z down the sanctuary front steps/courtyard in offline preview (VRM forward is -Z)
+	root.rotation.y = PI
 	add_child(root)
 
 	# Floating Divine Aura Particles
@@ -314,6 +336,21 @@ func get_deity(did: String) -> Node3D:
 
 func get_all_deities() -> Dictionary:
 	return _spawned_deities
+
+
+func get_deity_info(did: String) -> Dictionary:
+	"""Returns display info for a deity id (name/title/race/mood) or an empty dict if unknown."""
+	for cfg in DEITY_CONFIGS:
+		if cfg["id"] == did:
+			return {
+				"type": "DEITY",
+				"id": did,
+				"name": cfg["title"],
+				"title": cfg["epithet"],
+				"race": "DIVINE",
+				"mood": "calm",
+			}
+	return {}
 
 
 func get_nearest_deity(avatar_pos: Vector3, max_dist: float = 6.0) -> Dictionary:

@@ -9,15 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from sim_core.config import SETTLEMENT_TIER_REQUIREMENTS
 from sim_core.schemas import SettlementTier
 
-TIER_THRESHOLDS: dict[SettlementTier, dict[str, Any]] = {
-    "VILLAGE": {"min_pop": 10, "min_parcels": 4, "min_treasury": 50.0},
-    "TOWN": {"min_pop": 50, "min_parcels": 16, "min_treasury": 300.0},
-    "CITY": {"min_pop": 250, "min_parcels": 48, "min_treasury": 1500.0},
-    "STATE": {"min_pop": 600, "min_parcels": 100, "min_treasury": 5000.0},
-    "NATION": {"min_pop": 1000, "min_parcels": 160, "min_treasury": 12000.0},
-}
+TIER_THRESHOLDS: dict[SettlementTier, dict[str, Any]] = SETTLEMENT_TIER_REQUIREMENTS
 
 
 class BorderManager:
@@ -28,6 +23,17 @@ class BorderManager:
         self.parcel_to_settlement: dict[str, str] = {}
         # settlement_id -> set of parcel_ids
         self.settlement_borders: dict[str, set[str]] = {}
+
+    def register_settlement(self, settlement: Any) -> bool:
+        """Registers a SettlementRecord's border parcels or center parcel into borders."""
+        sid = getattr(settlement, "settlement_id", str(settlement))
+        parcel_ids = list(getattr(settlement, "border_parcel_ids", []))
+        if not parcel_ids and hasattr(settlement, "center_pos"):
+            cpos = settlement.center_pos
+            px = int(round(cpos.x) // 16)
+            pz = int(round(cpos.z) // 16)
+            parcel_ids = [f"{px}_{pz}"]
+        return self.register_settlement_border(sid, parcel_ids)
 
     def register_settlement_border(self, settlement_id: str, parcel_ids: list[str]) -> bool:
         """Registers non-overlapping parcels to a settlement."""

@@ -171,6 +171,7 @@ class WorldGoddessCheckpointManager:
             except json.JSONDecodeError:
                 history = []
 
+        history = [h for h in history if h.get("day") != day]
         history.append(manifest.model_dump())
         # Retain only last MAX_RETAINED_SNAPSHOTS
         history = history[-MAX_RETAINED_SNAPSHOTS:]
@@ -194,11 +195,15 @@ class WorldGoddessCheckpointManager:
     def restore_or_rewind_on_boot(
         self,
         live_db_path: str | Path,
+        target_day: int | None = None,
     ) -> tuple[int, DailyManifest, str]:
         """
         Verifies SHA-256 of checkpoints on startup.
-        If latest checkpoint is missing or corrupted, automatically rewinds
-        backward through prior verified snapshots, restores live .db, and logs [CORRUPTION_REWIND].
+        If target_day is specified, locates that exact day snapshot in history, verifies SHA-256,
+        and restores live .db and latest.md.
+        If target_day is None and the latest checkpoint is missing or corrupted,
+        automatically rewinds backward through prior verified snapshots, restores live .db,
+        and logs [CORRUPTION_REWIND].
         """
         if not self.history_path.exists() and not self.manifest_path.exists():
             raise FileNotFoundError("No checkpoint manifest found to restore.")
@@ -215,6 +220,50 @@ class WorldGoddessCheckpointManager:
             raise FileNotFoundError("Checkpoint history is empty.")
 
         live_db = Path(live_db_path)
+
+        if target_day is not None:
+            # Locate target_day entry (most recent for that day if multiple)
+            matching = [entry for entry in history if entry.get("day") == target_day]
+            if not matching:
+                raise FileNotFoundError(
+                    f"Checkpoint for target day {target_day} not found in history."
+                )
+            manifest = DailyManifest(**matching[-1])
+            db_p = Path(manifest.db_path)
+            pt_p = Path(manifest.pt_path)
+
+            if not db_p.exists() or not pt_p.exists():
+                raise FileNotFoundError(f"Snapshot files for Day {target_day} are missing on disk.")
+
+            current_db_sha = compute_file_sha256(db_p)
+            current_pt_sha = compute_file_sha256(pt_p)
+            if current_db_sha != manifest.db_sha256 or current_pt_sha != manifest.pt_sha256:
+                raise RuntimeError(
+                    f"CORRUPTION_DETECTED: Day {target_day} failed SHA-256 verification."
+                )
+
+            # Restore live database using SQLite backup API
+            if live_db.exists():
+                src = sqlite3.connect(db_p)
+                dst = sqlite3.connect(live_db)
+                try:
+                    src.backup(dst)
+                finally:
+                    src.close()
+                    dst.close()
+            else:
+                shutil.copy2(db_p, live_db)
+
+            # Sync latest.md to rewound ledger
+            if manifest.ledger_path and Path(manifest.ledger_path).exists():
+                latest_ledger = self.god_ledger_dir / "latest.md"
+                try:
+                    shutil.copy2(manifest.ledger_path, latest_ledger)
+                except OSError:
+                    pass
+
+            msg = f"[REWIND_SUCCESS] Successfully rewound to Day {manifest.day} (SHA-256 verified)."
+            return manifest.day, manifest, msg
 
         # Iterate from newest to oldest
         for idx, entry in enumerate(reversed(history)):

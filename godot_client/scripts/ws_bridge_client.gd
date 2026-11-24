@@ -84,7 +84,7 @@ func _poll_websocket() -> void:
 			var handshake: Dictionary = {
 				"type": "CLIENT_HANDSHAKE",
 				"client": "GODOT_CLIENT",
-				"version": "3.0.0",
+				"version": "4.0.0",
 				"is_god": true,
 			}
 			send_json(handshake)

@@ -108,6 +108,43 @@ class CityLayoutEngine:
         self.buildings: dict[str, BuildingRecord] = {}
         self.guard_assignments: dict[str, list[str]] = {}  # city_id -> list[guard_agent_id]
         self._initialize_cities_and_buildings()
+        self._register_city_polities_and_borders()
+
+    def _register_city_polities_and_borders(self) -> None:
+        """Registers the 5 Ring 1 cities as CITY-tier polities and registers borders."""
+        if not self.engine:
+            return
+
+        pol_engine = getattr(self.engine, "political_engine", None)
+        border_mgr = getattr(self.engine, "border_mgr", None)
+
+        from sim_core.society.politics import Polity
+
+        for cid, city in self.cities.items():
+            cx_p = int(round(city.center_x) // 16)
+            cz_p = int(round(city.center_z) // 16)
+            # 7x7 parcel grid (49 parcels) centered at city center meets
+            # TIER_THRESHOLDS["CITY"] >= 48
+            city_parcels = {
+                f"{cx_p + dx}_{cz_p + dz}" for dx in range(-3, 4) for dz in range(-3, 4)
+            }
+            for b in self.buildings.values():
+                if b.city_id == cid:
+                    city_parcels.add(f"{b.parcel_x}_{b.parcel_z}")
+
+            if pol_engine and cid not in pol_engine.polities:
+                polity = Polity(
+                    settlement_id=cid,
+                    name=city.name,
+                    tier="CITY",
+                    regime_type="ELECTED" if cid in ("sylvanor", "aurelia") else "KING",
+                    treasury_credits=2000.0,
+                )
+                polity.border_parcels.update(city_parcels)
+                pol_engine.register_polity(polity)
+
+            if border_mgr:
+                border_mgr.register_settlement_border(cid, list(city_parcels))
 
     def _initialize_cities_and_buildings(self) -> None:
         """Constructs all 5 Ring 1 city layouts, palaces, gates, and seed buildings."""
@@ -234,7 +271,7 @@ class CityLayoutEngine:
                 x=round(gx, 2),
                 y=round(gy, 2),
                 z=round(gz, 2),
-                rotation_y=round(angle, 4),
+                rotation_y=round((math.pi * 0.5) - angle, 4),
                 parcel_x=px,
                 parcel_z=pz,
                 footprint_radius=12.0,
@@ -248,97 +285,142 @@ class CityLayoutEngine:
 
     def _create_seed_buildings(self, city: CityRecord) -> None:
         """
-        Spawns 20 seed buildings per city across 4 modular archetypes (r = 65m .. 200m):
-        - 7 HOUSE_T1_COTTAGE (starter/rental homes)
-        - 6 HOUSE_T2_TOWNHOUSE (artisan family homes)
-        - 3 HOUSE_T3_MANOR (wealthy elder/merchant estates)
-        - 4 Commercial stalls/workshops (1 SHOP_MARKET, 2 SHOP_BLACKSMITH, 1 SHOP_TAVERN)
-        Total = 20 seed buildings.
-        ~65% initially owned by seed citizens (13 owned), ~35% listed for_sale = True (7 for sale).
+        Spawns 44 non-overlapping seed buildings per city arranged in 4 quadrants
+        around 4 unobstructed 24m+ cross-axis boulevards (clearing >= 16° around
+        every gate axis, r = 68m .. 196m):
+        - 16 HOUSE_T1_COTTAGE (starter/rental homes)
+        - 14 HOUSE_T2_TOWNHOUSE (artisan family homes)
+        -  4 HOUSE_T3_MANOR (wealthy elder/merchant estates)
+        - 10 Commercial shops (4 SHOP_MARKET, 4 SHOP_BLACKSMITH, 2 SHOP_TAVERN)
+        Total = 44 seed buildings (~66% owned, ~34% for_sale).
         """
         cx, cz = city.center_x, city.center_z
         main_gate_angle = math.atan2(-cz, -cx)
 
-        # 20 Building Archetypes & initial sale configurations
-        building_templates: list[tuple[BuildingType, float, bool, str]] = [
-            ("HOUSE_T1_COTTAGE", 180.0, False, "Cottage"),
-            ("HOUSE_T1_COTTAGE", 180.0, True, "Starter Cottage"),
-            ("HOUSE_T1_COTTAGE", 195.0, False, "Cottage"),
-            ("HOUSE_T1_COTTAGE", 190.0, True, "Cozy Cottage"),
-            ("HOUSE_T1_COTTAGE", 175.0, False, "Cottage"),
-            ("HOUSE_T1_COTTAGE", 200.0, False, "Garden Cottage"),
-            ("HOUSE_T1_COTTAGE", 185.0, True, "Market Cottage"),
-            ("HOUSE_T2_TOWNHOUSE", 320.0, False, "Artisan Townhouse"),
-            ("HOUSE_T2_TOWNHOUSE", 340.0, True, "Spacious Townhouse"),
-            ("HOUSE_T2_TOWNHOUSE", 310.0, False, "Townhouse"),
-            ("HOUSE_T2_TOWNHOUSE", 330.0, False, "Mason Townhouse"),
-            ("HOUSE_T2_TOWNHOUSE", 350.0, True, "Grand Townhouse"),
-            ("HOUSE_T2_TOWNHOUSE", 315.0, False, "Townhouse"),
-            ("HOUSE_T3_MANOR", 580.0, False, "Elder Estate"),
-            ("HOUSE_T3_MANOR", 620.0, True, "Merchant Manor"),
-            ("HOUSE_T3_MANOR", 590.0, False, "Noble Manor"),
-            ("SHOP_MARKET", 420.0, False, "City Provision Stalls"),
-            ("SHOP_BLACKSMITH", 450.0, False, "Iron & Anvil Forge"),
-            ("SHOP_BLACKSMITH", 440.0, True, "Artisan Smithy"),
-            ("SHOP_TAVERN", 480.0, False, "The Wayfarer's Rest"),
+        # 11-slot quadrant layout (angles in degrees inside [16°, 74°] of each 90° quadrant)
+        # (radius, quad_offset_deg, face_mode, btype, price, for_sale, desc)
+        # face_mode: "inward" -> faces center/inner plaza; "outward" -> faces outer mid street;
+        #            "boulevard_ccw" / "boulevard_cw" -> faces nearest cross-axis boulevard
+        quad_slots_even: list[tuple[float, float, str, BuildingType, float, bool, str]] = [
+            (68.0, 24.0, "inward", "SHOP_MARKET", 420.0, False, "Market Stall"),
+            (86.0, 45.0, "inward", "SHOP_TAVERN", 480.0, False, "Wayfarer's Rest"),
+            (68.0, 66.0, "inward", "HOUSE_T2_TOWNHOUSE", 320.0, False, "Plaza Townhouse"),
+            (116.0, 20.0, "boulevard_ccw", "HOUSE_T1_COTTAGE", 180.0, False, "Boulevard Cottage"),
+            (132.0, 37.0, "outward", "HOUSE_T2_TOWNHOUSE", 330.0, True, "Artisan Townhouse"),
+            (132.0, 53.0, "outward", "HOUSE_T1_COTTAGE", 190.0, True, "Corner Cottage"),
+            (116.0, 70.0, "boulevard_cw", "SHOP_BLACKSMITH", 440.0, False, "Forge Workshop"),
+            (174.0, 20.0, "inward", "HOUSE_T1_COTTAGE", 175.0, False, "Gatehouse Cottage"),
+            (196.0, 37.0, "inward", "HOUSE_T3_MANOR", 590.0, False, "Elder Manor"),
+            (196.0, 53.0, "inward", "HOUSE_T1_COTTAGE", 185.0, True, "Garden Cottage"),
+            (174.0, 70.0, "inward", "HOUSE_T2_TOWNHOUSE", 315.0, False, "Outer Townhouse"),
+        ]
+        quad_slots_odd: list[tuple[float, float, str, BuildingType, float, bool, str]] = [
+            (68.0, 24.0, "inward", "SHOP_MARKET", 420.0, False, "Market Stall"),
+            (86.0, 45.0, "inward", "SHOP_BLACKSMITH", 450.0, True, "Artisan Smithy"),
+            (68.0, 66.0, "inward", "HOUSE_T2_TOWNHOUSE", 320.0, False, "Plaza Townhouse"),
+            (116.0, 20.0, "boulevard_ccw", "HOUSE_T1_COTTAGE", 180.0, False, "Boulevard Cottage"),
+            (132.0, 37.0, "outward", "HOUSE_T2_TOWNHOUSE", 330.0, True, "Artisan Townhouse"),
+            (132.0, 53.0, "outward", "HOUSE_T1_COTTAGE", 190.0, True, "Corner Cottage"),
+            (116.0, 70.0, "boulevard_cw", "HOUSE_T2_TOWNHOUSE", 340.0, False, "Guild Townhouse"),
+            (174.0, 20.0, "inward", "HOUSE_T1_COTTAGE", 175.0, False, "Gatehouse Cottage"),
+            (196.0, 37.0, "inward", "HOUSE_T3_MANOR", 590.0, False, "Elder Manor"),
+            (196.0, 53.0, "inward", "HOUSE_T1_COTTAGE", 185.0, True, "Garden Cottage"),
+            (174.0, 70.0, "inward", "HOUSE_T2_TOWNHOUSE", 315.0, False, "Outer Townhouse"),
         ]
 
-        # Radial rings for street layout
-        # Leave a 30° corridor clear toward main_gate_angle for Imperial Highway
-        ring_radii = [80.0, 115.0, 150.0, 185.0]
+        placed_footprints: list[tuple[float, float, float]] = []
+        used_parcels: set[tuple[int, int]] = set()
+        idx = 0
 
-        for idx, (btype, price, for_sale, desc) in enumerate(building_templates):
-            ring_idx = idx % len(ring_radii)
-            radius = ring_radii[ring_idx]
+        for q in range(4):
+            quad_base_angle = main_gate_angle + q * (math.pi * 0.5)
+            slots = quad_slots_even if (q % 2 == 0) else quad_slots_odd
+            for slot_i, (radius, deg_off, face_mode, btype, price, for_sale, desc) in enumerate(
+                slots
+            ):
+                if q == 3 and slot_i == 8:
+                    for_sale = True
+                    price = 620.0
+                    desc = "Merchant Manor"
 
-            # Distribute angularly around the city, skipping directly along main highway
-            slot_in_ring = idx // len(ring_radii)
-            angle_step = (2.0 * math.pi) / 6.0
-            base_angle = (
-                main_gate_angle + math.pi * 0.25 + slot_in_ring * angle_step + (ring_idx * 0.3)
-            )
-            angle = base_angle % (2.0 * math.pi)
+                idx += 1
+                angle = (quad_base_angle + math.radians(deg_off)) % (2.0 * math.pi)
+                bx = cx + radius * math.cos(angle)
+                bz = cz + radius * math.sin(angle)
+                by = self._get_elevation(bx, bz, city.elevation_y)
 
-            bx = cx + radius * math.cos(angle)
-            bz = cz + radius * math.sin(angle)
-            by = self._get_elevation(bx, bz, city.elevation_y)
+                px = int(round(bx) // 16)
+                pz = int(round(bz) // 16)
 
-            px = int(round(bx) // 16)
-            pz = int(round(bz) // 16)
+                if face_mode == "inward":
+                    face_angle = angle + math.pi
+                elif face_mode == "boulevard_ccw":
+                    # Face perpendicular toward quad_base_angle axis
+                    face_angle = quad_base_angle - (math.pi * 0.5)
+                elif face_mode == "boulevard_cw":
+                    # Face perpendicular toward next quadrant's boulevard axis
+                    face_angle = quad_base_angle + math.pi
+                else:
+                    face_angle = angle
 
-            # Rotation facing street / center
-            rot_y = round((angle + math.pi) % (2.0 * math.pi), 4)
+                # Local +Z faces (sin(rot_y), cos(rot_y)) = (cos(face_angle), sin(face_angle))
+                rot_y = round(((math.pi * 0.5) - face_angle) % (2.0 * math.pi), 4)
 
-            bld_id = f"bld_{city.city_id}_seed_{idx + 1:02d}"
-            owner_id = None if for_sale else f"citizen_{city.city_id}_{idx + 1:02d}"
-            owner_name = None if for_sale else f"{city.name} {desc} Citizen"
+                fp_radius = 8.0 if "COTTAGE" in btype else (11.0 if "TOWNHOUSE" in btype else 14.0)
+                for ox, oz, orad in placed_footprints:
+                    dist_pair = math.hypot(bx - ox, bz - oz)
+                    assert (
+                        dist_pair >= fp_radius + orad + 2.5
+                    ), f"Overlap in {city.city_id}: {dist_pair:.2f} < {fp_radius + orad + 2.5}"
+                assert (px, pz) not in used_parcels, (
+                    f"Duplicate parcel {(px, pz)} in {city.city_id}"
+                )
+                placed_footprints.append((bx, bz, fp_radius))
+                used_parcels.add((px, pz))
 
-            bld = BuildingRecord(
-                building_id=bld_id,
-                city_id=city.city_id,
-                building_type=btype,
-                racial_style=city.racial_style,
-                x=round(bx, 2),
-                y=round(by, 2),
-                z=round(bz, 2),
-                rotation_y=rot_y,
-                parcel_x=px,
-                parcel_z=pz,
-                footprint_radius=(
-                    8.0 if "COTTAGE" in btype else (11.0 if "TOWNHOUSE" in btype else 14.0)
-                ),
-                owner_id=owner_id,
-                owner_name=owner_name,
-                for_sale=for_sale,
-                sale_price=price,
-            )
-            self.buildings[bld_id] = bld
-            self._register_parcel_deed(
-                bld,
-                assessed_value=price * 0.9,
-                for_sale=for_sale,
-                sale_price=price,
-            )
+                bld_id = f"bld_{city.city_id}_seed_{idx:02d}"
+                owner_id = None if for_sale else f"citizen_{city.city_id}_{idx:02d}"
+                owner_name = None if for_sale else f"{city.name} {desc} Citizen"
+
+                bld = BuildingRecord(
+                    building_id=bld_id,
+                    city_id=city.city_id,
+                    building_type=btype,
+                    racial_style=city.racial_style,
+                    x=round(bx, 2),
+                    y=round(by, 2),
+                    z=round(bz, 2),
+                    rotation_y=rot_y,
+                    parcel_x=px,
+                    parcel_z=pz,
+                    footprint_radius=fp_radius,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    for_sale=for_sale,
+                    sale_price=price,
+                )
+                self.buildings[bld_id] = bld
+                self._register_parcel_deed(
+                    bld,
+                    assessed_value=price * 0.9,
+                    for_sale=for_sale,
+                    sale_price=price,
+                )
+
+                # Register building footprint in navigation engine with doorway along Local +Z
+                door_dist = bld.footprint_radius + 1.5
+                door_x = round(bld.x + door_dist * math.sin(bld.rotation_y), 2)
+                door_z = round(bld.z + door_dist * math.cos(bld.rotation_y), 2)
+                if self.engine and hasattr(self.engine, "navigation") and self.engine.navigation:
+                    self.engine.navigation.register_building_footprint(
+                        name=bld.building_id,
+                        cx=bld.x,
+                        cz=bld.z,
+                        radius=bld.footprint_radius,
+                        door_x=door_x,
+                        door_z=door_z,
+                        building_type=bld.building_type,
+                    )
 
     def spawn_city_guard_garrison(
         self,
@@ -394,11 +476,45 @@ class CityLayoutEngine:
                     title=title,
                     initial_credits=45.0,
                     agent_id=agent_id,
+                    settlement_id=city_id,
                 )
                 self.guard_assignments[city_id].append(agent.agent_id)
                 guards.append(agent)
 
         return guards
+
+    def rebuild_guard_roster(self, agents_registry: dict[str, AgentRecord]) -> None:
+        """Reconstructs city guard assignments across all 5 Ring 1 cities from living agents."""
+        for cid in self.cities:
+            self.guard_assignments[cid] = []
+
+        for agent in agents_registry.values():
+            if not agent.alive or agent.role != "CITY_GUARD":
+                continue
+
+            # Determine assigned city
+            cid = agent.settlement_id
+            if not cid or cid not in self.cities:
+                # Fall back to parsing guard_<city_id>_* or nearest city center
+                if agent.agent_id.startswith("guard_"):
+                    parts = agent.agent_id.split("_")
+                    if len(parts) >= 2:
+                        potential_cid = "_".join(parts[1:-1]) if len(parts) > 2 else parts[1]
+                        if potential_cid in self.cities:
+                            cid = potential_cid
+                if not cid or cid not in self.cities:
+                    best_dist = float("inf")
+                    for c_key, c_val in self.cities.items():
+                        dx = agent.pos.x - c_val.center_x
+                        dz = agent.pos.z - c_val.center_z
+                        d = dx * dx + dz * dz
+                        if d < best_dist:
+                            best_dist = d
+                            cid = c_key
+
+            if cid and cid in self.cities:
+                if agent.agent_id not in self.guard_assignments[cid]:
+                    self.guard_assignments[cid].append(agent.agent_id)
 
     def buy_building(
         self,
@@ -427,14 +543,35 @@ class CityLayoutEngine:
                 f"required {bld.sale_price:.1f} cr",
             )
 
-        # Debit credits
-        buyer_agent.credits -= bld.sale_price
         old_owner_id = bld.owner_id
+        active_bank = bank
+        if active_bank is None and self.engine and hasattr(self.engine, "bank"):
+            active_bank = self.engine.bank
+
+        if active_bank is not None:
+            seller: Any = active_bank
+            if old_owner_id and self.engine and old_owner_id in self.engine.agents:
+                prev_owner = self.engine.agents[old_owner_id]
+                if prev_owner.alive:
+                    seller = prev_owner
+            ok, reason = active_bank.transfer_credits(
+                sender=buyer_agent,
+                receiver=seller,
+                amount=bld.sale_price,
+                memo=f"BUY_BUILDING_{building_id}",
+            )
+            if not ok:
+                return False, f"TRANSFER_FAILED: {reason}"
+        else:
+            return False, "BANK_OR_SELLER_REQUIRED"
 
         # Update building state
         bld.owner_id = buyer_agent.agent_id
         bld.owner_name = buyer_agent.display_name
         bld.for_sale = False
+
+        if bld.building_type.startswith("HOUSE_"):
+            buyer_agent.home_building_id = building_id
 
         # Update parcel deed in PropertyManager
         if self.engine and hasattr(self.engine, "property_mgr"):
@@ -455,8 +592,14 @@ class CityLayoutEngine:
                         "building": bld.model_dump(),
                     },
                 )
-            except Exception:
-                pass
+            except Exception as ex:
+                if self.engine and hasattr(self.engine, "healer") and self.engine.healer:
+                    self.engine.healer.handle(
+                        "WS_BRIDGE_DROP",
+                        day=getattr(self.engine, "current_day", 1),
+                        tick=getattr(self.engine, "current_tick", 0),
+                        context={"error": str(ex), "action": "BUILDING_UPDATE_BROADCAST"},
+                    )
 
         msg = f"SUCCESS: Bought {building_id} for {bld.sale_price:.1f} cr from {old_owner_id}"
         return True, msg
@@ -501,10 +644,26 @@ class CityLayoutEngine:
                     target_z = cz + (r - 4.0) * math.sin(base_angle + shift)
 
                 target_y = self._get_elevation(target_x, target_z, city.elevation_y)
+                dx = target_x - agent.pos.x
+                dz = target_z - agent.pos.z
+                if abs(dx) > 1e-4 or abs(dz) > 1e-4:
+                    agent.yaw = round(math.atan2(-dx, -dz), 4)
                 # Nudge agent smoothly toward post
-                agent.pos.x += (target_x - agent.pos.x) * 0.15
-                agent.pos.z += (target_z - agent.pos.z) * 0.15
+                agent.pos.x += dx * 0.15
+                agent.pos.z += dz * 0.15
                 agent.pos.y = target_y
+
+                if self.engine:
+                    if hasattr(self.engine, "spatial_grid") and self.engine.spatial_grid:
+                        self.engine.spatial_grid.update_agent(gid, agent.pos.x, agent.pos.z)
+                    if hasattr(self.engine, "adapter") and self.engine.adapter:
+                        self.engine.adapter.update_agent_position(
+                            slot_idx=agent.slot_idx,
+                            x=agent.pos.x,
+                            y=agent.pos.y,
+                            z=agent.pos.z,
+                            yaw=agent.yaw,
+                        )
 
     def verify_ring_2_wilderness(self) -> tuple[bool, str]:
         """
